@@ -1,4 +1,4 @@
-# Optimisation and streamlining
+# Optimisation record
 
 What was considered, what was measured, and what was rejected. The standing rule
 is that a change trading git fidelity for speed or brevity is not worth it, so

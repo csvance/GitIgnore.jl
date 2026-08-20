@@ -34,7 +34,7 @@ per path and 29 s for the tree; the difference is the machine and the disk, not
 the shape of the result.
 
 The in-process rows are what they are because of the two optimisations recorded
-in [OPTIMISATION.md](OPTIMISATION.md). Before them the pruned walk cost 0.0021 s
+in the [optimisation record](optimisation.md). Before them the pruned walk cost 0.0021 s
 and the per-entry queries 0.0090 s.
 
 ## Reading the table

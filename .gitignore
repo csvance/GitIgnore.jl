@@ -1,4 +1,5 @@
-/Manifest.toml
-/Manifest-v*.toml
+# The package is tracked; manifests, the docs build and IDE state are not.
+Manifest.toml
+Manifest-v*.toml
 /docs/build/
 /.idea/
