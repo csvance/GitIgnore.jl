@@ -16,6 +16,10 @@ hero:
     - theme: alt
       text: View on GitHub
       link: https://github.com/csvance/GitIgnore.jl
+  image:
+    src: /logo.svg
+    dark: /logo-dark.svg
+    alt: GitIgnore.jl
 
 features:
   - icon: 🔍

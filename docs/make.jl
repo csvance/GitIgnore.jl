@@ -14,6 +14,16 @@ makedocs(
         edit_link = "main",
         canonical = "https://csvance.github.io/GitIgnore.jl/",
         inventory_version = "0.1.0",
+        # The site deploys to a GitHub Pages *project* page
+        # (.../GitIgnore.jl/dev/), so the favicon href has to stay page-relative.
+        # Documenter computes that per page for an `asset`, and the `:ico` class
+        # is the supported way to emit `<link rel=icon>` from a file that is not
+        # an `.ico`. Browsers sniff the served content, so the generic type hint
+        # Documenter writes is harmless. The sidebar logo needs no entry here:
+        # Documenter picks up assets/logo.svg and assets/logo-dark.svg itself.
+        assets = [
+            Documenter.asset("assets/favicon.svg", class = :ico, islocal = true),
+        ],
     ),
     repo = Documenter.Remotes.GitHub("csvance", "GitIgnore.jl"),
     modules = [GitIgnore],
