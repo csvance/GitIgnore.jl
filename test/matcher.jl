@@ -189,3 +189,73 @@ end
         end
     end
 end
+
+# The tree the "Nested repositories" section of the docs is written around, so
+# the verdicts printed there cannot drift away from what the package does.
+function build_checkouts(root::AbstractString)
+    mkpath(joinpath(root, "app", ".git"))
+    mkpath(joinpath(root, "app", "build"))
+    mkpath(joinpath(root, "lib", ".git", "info"))
+    mkpath(joinpath(root, "notes"))
+    write(joinpath(root, "app", ".gitignore"), "build/\n*.log\n!keep.log\n")
+    write(joinpath(root, "lib", ".gitignore"), "*.o\n")
+    write(joinpath(root, "lib", ".git", "info", "exclude"), "scratch.txt\n")
+    for path in (
+            "app/main.jl", "app/keep.log", "app/debug.log", "app/build/out.o",
+            "lib/util.jl", "lib/util.o", "lib/debug.log", "lib/scratch.txt",
+            "notes/debug.log", "notes/todo.md",
+        )
+        write(joinpath(root, split(path, '/')...), "x")
+    end
+    return root
+end
+
+@testset "the nested repositories example from the docs" begin
+    mktempdir() do root
+        build_checkouts(root)
+        matcher = IgnoreMatcher(root)
+        for (path, expected) in (
+                "app/main.jl" => false, "app/keep.log" => false,
+                "app/debug.log" => true, "app/build" => true,
+                "app/build/out.o" => true, "lib/util.jl" => false,
+                "lib/util.o" => true, "lib/debug.log" => false,
+                "lib/scratch.txt" => true, "notes/debug.log" => false,
+                "notes/todo.md" => false,
+            )
+            @test isignored(matcher, path) == expected
+        end
+
+        # One basename, three answers, because each repository's rules stop where
+        # the repository does.
+        @test isignored(matcher, "app/debug.log")
+        @test !isignored(matcher, "lib/debug.log")
+        @test !isignored(matcher, "notes/debug.log")
+
+        listing = Pair{String, Vector{String}}[]
+        result = walkfiltered(matcher, root) do dir, dirs, files
+            push!(listing, relpath(dir, root) => vcat(dirs, files))
+            return true
+        end
+        @test listing == [
+            "." => ["app", "lib", "notes"],
+            "app" => [".gitignore", "keep.log", "main.jl"],
+            "lib" => [".gitignore", "debug.log", "util.jl"],
+            "notes" => ["debug.log", "todo.md"],
+        ]
+        # app/build, app/debug.log, lib/util.o and lib/scratch.txt. The two .git
+        # directories are skipped rather than counted.
+        @test result.skipped == 4
+        @test result.completed
+
+        # Rooting at one repository gives that repository's semantics, and the
+        # root is a boundary a query cannot cross.
+        app = IgnoreMatcher(joinpath(root, "app"))
+        @test isignored(app, "debug.log")
+        @test_throws ArgumentError isignored(app, "../lib/util.o")
+
+        # `excludes = false` drops the exclude file and leaves .gitignore alone.
+        without = IgnoreMatcher(root; excludes = false)
+        @test !isignored(without, "lib/scratch.txt")
+        @test isignored(without, "lib/util.o")
+    end
+end

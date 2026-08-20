@@ -94,6 +94,98 @@ which is both git's view and `walkdir`'s default. A directory that cannot be rea
 is skipped rather than throwing, so one unreadable directory does not fail a
 whole walk.
 
+## Nested repositories
+
+The root does not have to be a repository, and there is no separate interface for
+the case where it is not: one matcher covers whatever it finds below it. Every
+`.gitignore` and `.git/info/exclude` on the way down applies to its own subtree,
+which is what git does, so a tool pointed at a directory full of checkouts gets
+each repository's rules without being told where they are.
+
+Given this tree, where `app` and `lib` are separate repositories and `notes` is
+not a repository at all:
+
+```
+src/                        <- the matcher root, not a repository
+├── app/
+│   ├── .git/
+│   ├── .gitignore          build/  *.log  !keep.log
+│   ├── build/out.o
+│   ├── debug.log
+│   ├── keep.log
+│   └── main.jl
+├── lib/
+│   ├── .git/info/exclude   scratch.txt
+│   ├── .gitignore          *.o
+│   ├── debug.log
+│   ├── scratch.txt
+│   ├── util.jl
+│   └── util.o
+└── notes/
+    ├── debug.log
+    └── todo.md
+```
+
+one matcher answers for all of it:
+
+```julia
+matcher = IgnoreMatcher("src")
+
+isignored(matcher, "app/debug.log")      # true, app's *.log
+isignored(matcher, "app/keep.log")       # false, app re-included it by name
+isignored(matcher, "app/build")          # true, app's build/
+isignored(matcher, "app/build/out.o")    # true, taken from the excluded parent
+isignored(matcher, "lib/util.o")         # true, lib's *.o
+isignored(matcher, "lib/scratch.txt")    # true, lib's .git/info/exclude
+isignored(matcher, "lib/debug.log")      # false, lib has no rule for logs
+isignored(matcher, "notes/debug.log")    # false, no repository, no rules
+```
+
+The three `debug.log` files are the point: one basename, three answers, because
+each repository's rules stop where the repository does.
+
+The walk behaves the same way, pruning each repository by its own rules and
+skipping every `.git` it meets, at any depth:
+
+```julia-repl
+julia> walkfiltered(matcher, "src") do dir, dirs, files
+           println(rpad(relpath(dir, "src"), 6), " dirs=", dirs, " files=", files)
+           return true
+       end
+.      dirs=["app", "lib", "notes"] files=String[]
+app    dirs=String[] files=[".gitignore", "keep.log", "main.jl"]
+lib    dirs=String[] files=[".gitignore", "debug.log", "util.jl"]
+notes  dirs=String[] files=["debug.log", "todo.md"]
+(completed = true, skipped = 4)
+```
+
+`skipped` is 4: `app/build`, `app/debug.log`, `lib/util.o` and
+`lib/scratch.txt`. The `.git` directories are not counted, because skipping them
+hides nothing about a repository.
+
+Rooting a matcher at one of the repositories instead gives that repository's
+semantics and nothing else, and the root is a boundary the query cannot cross:
+
+```julia
+app = IgnoreMatcher("src/app")
+
+isignored(app, "debug.log")              # true
+isignored(app, "../lib/util.o")          # ArgumentError: not inside the root
+```
+
+A nested repository's `.git/info/exclude` being honoured is deliberate, and it is
+the one place this diverges from git run from above that repository, which reads
+only the outermost exclude file. Honouring a nested repository's `.gitignore` but
+not its excludes would honour half its rules. `excludes = false` turns exclude
+files off everywhere and leaves `.gitignore` alone:
+
+```julia
+matcher = IgnoreMatcher("src"; excludes = false)
+
+isignored(matcher, "lib/scratch.txt")    # false, the exclude file is not read
+isignored(matcher, "lib/util.o")         # true, .gitignore still applies
+```
+
 ## Rules that are not on disk
 
 The two-argument constructor takes `prefix => content` pairs, where `prefix` is

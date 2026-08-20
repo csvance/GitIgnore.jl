@@ -42,6 +42,14 @@ isignored(matcher, "build/out.o")
 
 inmemory = IgnoreMatcher(".", ["" => "*.log\\n", "pkg" => "!keep.log\\n"])
 isignored(inmemory, "pkg/keep.log", false)
+
+# One matcher above several checkouts. There is no separate interface for this:
+# each repository's rules govern its own subtree, so one basename gets different
+# answers in different repositories.
+checkouts = IgnoreMatcher("/home/me/src")
+isignored(checkouts, "app/debug.log")     # true, app/.gitignore holds *.log
+isignored(checkouts, "lib/debug.log")     # false, lib has no rule for logs
+isignored(checkouts, "notes/debug.log")   # false, notes is not a repository
 ```
 
 See also [`isignored`](@ref), [`walkfiltered`](@ref).

@@ -59,6 +59,21 @@ walkfiltered(matcher, "/path/to/repo") do dir, dirs, files
 end
 ```
 
+The root need not be a repository. One matcher covers a whole directory of
+checkouts, and each repository's rules govern its own subtree, which is what git
+does:
+
+```julia
+checkouts = IgnoreMatcher("/home/me/src")
+
+isignored(checkouts, "app/build/out.o")   # true, from app/.gitignore
+isignored(checkouts, "lib/scratch.txt")   # true, from lib/.git/info/exclude
+isignored(checkouts, "notes/debug.log")   # false, notes is not a repository
+```
+
+There is no separate interface for that case; see
+[Nested repositories](guide.md#Nested-repositories) for the whole worked example.
+
 Start with the [Guide](guide.md) for the whole API, or with
 [Fidelity to git](fidelity.md) for how the verdicts are verified, what is
 deliberately not supported, and why neither `libgit2` nor shelling out to `git`
