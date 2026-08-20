@@ -91,6 +91,72 @@ and a second copy of the match loop. Not taken: the lazy form above gets the sam
 result for the common case, since a root rule set has an empty prefix and
 stripping it is already free.
 
+### Allocations
+
+A separate pass with `BenchmarkTools` and `Profile.Allocs` at `sample_rate = 1`,
+which attributes every allocation to the line that made it, over a 12,048 entry
+tree on local disk. Wall-clock time did not move outside noise in any of this;
+what follows is about allocations.
+
+| | before | after |
+| --- | --- | --- |
+| `walkfiltered`, whole tree, warm matcher | 4,579 allocs, 0.33 MiB | 3,261 allocs, 0.25 MiB |
+| `isignored`, absolute path | 58 allocs, 3,296 B, 4.59 us | 13 allocs, 560 B, 0.64 us |
+| `isignored`, three segment relative path | 9 allocs, 336 B | 9 allocs, 336 B |
+| `dir_entries`, 31 entry directory | 42 allocs, 3,248 B | 40 allocs, 2,960 B |
+
+**An absolute path no longer goes through `relpath`.** Nearly all of the 58
+allocations were one line: `relpath(abspath(path), root)`, which splits both
+paths into components and compares them. A path under the root needs the root
+sliced off the front instead, which is a `startswith` and a view. `relpath` is
+kept for the case the slice cannot answer, a path that is not under the root at
+all, where the `..` it produces is what turns the caller's mistake into the
+`ArgumentError` they should get. Asking about an absolute path is the natural
+thing to do with a path that came from `walkdir`, and it was the worst number in
+the profile by an order of magnitude.
+
+**The walk no longer builds a path per entry when nothing reads one.** A path is
+read only by an anchored pattern or to decide whether a nested rule set applies,
+and most ignore files contain neither, so `IgnoreRules` now records whether any
+of its patterns looks at the path, and the walk checks once per directory whether
+any rule in scope wants one. Where none does, the entry's own name stands in.
+That was 1,843 of the walk's allocations on this tree, and 1,210 of them went
+away; the rest are the two directories here that do have a nested rule set.
+
+**`dir_entries` sizes its vector from the listing** rather than growing it an
+entry at a time, since both listing functions return something with a length.
+
+**The segment split moved into its own method.** Not a saving on its own: it is
+what makes the first item safe, because a variable that is sometimes a `String`
+and sometimes a view costs an allocation at every use of it.
+
+### Tried, measured, reverted
+
+Recorded because the measurement is the only reason to prefer the code that is
+there, and because three of the four were the same Julia mistake.
+
+- **Segments as views instead of copies.** `Vector{SubString{String}}` avoids
+  copying each segment, and cost more: the same allocation count, more bytes,
+  because a view is three words where a string reference is one, and it made the
+  accumulated relative path a union of two types, so `path_ignored` boxed its
+  argument at every call. `isignored` went from 9 allocations to 12.
+- **`sizehint!` on the segment vector**, from `count('/', text) + 1`. The count
+  scan and the up-front buffer cost more than the growth they avoided:
+  `root_segments` went from 5 allocations to 8.
+- **An `occursin` guard before `replace` in `normalize_relpath`,** on the theory
+  that `replace` allocates a new string even when it changes nothing. It does not:
+  the line never appeared in the allocation profile, before or after. No benefit,
+  so the guard went.
+- **Looking the rule cache up before inserting,** to keep a view-typed key from
+  being converted on a hit. Only useful with the views above, which are gone.
+
+Still there and not worth touching: `copy` of the root's rules in `isignored` is
+two allocations that a growable stack has to pay; the `dirs` and `files` vectors
+grow in 138 allocations across the tree; and `isignored` could avoid materialising
+segments at all by taking views of one normalised path, which is the shape the
+walk already has, but it would need a second normalisation path beside
+`split_segments` and that is where a fidelity bug would hide.
+
 ## Rejected
 
 ### Flattening, sharing or caching the per-directory rule stack

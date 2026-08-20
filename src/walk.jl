@@ -26,22 +26,30 @@ path_is_dir(path::AbstractString) = entry_is_dir(path)
 # `readdirx` is a parameter only so the slow path can be tested on a Julia that
 # still has the fast one.
 function dir_entries(dir::AbstractString, readdirx::Bool = HAS_READDIRX)
-    entries = Tuple{String, Bool}[]
+    if readdirx
+        return collect_entries(Base.Filesystem._readdirx(dir)) do entry
+            (entry.name, entry_is_dir(entry))
+        end
+    end
+    return collect_entries(readdir(dir)) do name
+        (name, path_is_dir(joinpath(dir, name)))
+    end
+end
+
+# Sized once from the listing rather than grown an entry at a time, and generic
+# over the listing's element type so the loop stays specialised: a branch on the
+# listing kind inside the loop makes the whole thing dynamic, which costs an
+# allocation per entry.
+function collect_entries(describe, listing)
+    entries = Vector{Tuple{String, Bool}}(undef, length(listing))
     gitdir = false
     ignorefile = false
-    if readdirx
-        for entry in Base.Filesystem._readdirx(dir)
-            name = entry.name
-            name == ".git" && (gitdir = true)
-            name == IGNORE_FILE_NAME && (ignorefile = true)
-            push!(entries, (name, entry_is_dir(entry)))
-        end
-    else
-        for name in readdir(dir)
-            name == ".git" && (gitdir = true)
-            name == IGNORE_FILE_NAME && (ignorefile = true)
-            push!(entries, (name, path_is_dir(joinpath(dir, name))))
-        end
+    for (index, item) in enumerate(listing)
+        entry = describe(item)
+        name = first(entry)
+        name == ".git" && (gitdir = true)
+        name == IGNORE_FILE_NAME && (ignorefile = true)
+        entries[index] = entry
     end
     return (; entries, gitdir, ignorefile)
 end
@@ -113,12 +121,22 @@ function walkfiltered(
         dirs = String[]
         files = String[]
         has_rules = !isempty(rules)
+        # A path is only ever read by an anchored pattern, or to decide whether a
+        # nested rule set applies at all. Neither is present on most trees, and
+        # then the entry's name stands in for the path it would have built: no
+        # rule looks at it, and building one per entry is the largest allocation
+        # in the walk.
+        needs_path = any(rule -> !isempty(rule.prefix) || rule.needs_path, rules)
         for (name, is_dir) in listing.entries
             # Checked on the name, before any path is built: on a tree with no
             # rules at all this is the only work the filter does.
             skipgit && name == ".git" && continue
             if has_rules
-                rel = isempty(dir_rel) ? name : "$(dir_rel)/$(name)"
+                rel = if !needs_path || isempty(dir_rel)
+                    name
+                else
+                    "$(dir_rel)/$(name)"
+                end
                 if path_ignored(rules, rel, name, is_dir)
                     skipped += 1
                     continue

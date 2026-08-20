@@ -51,10 +51,15 @@ The patterns from one ignore file, plus `prefix`: the declaring directory
 relative to the matcher root, `""` for the root itself. A path is tested against
 these patterns after `prefix` is stripped from it, which is what makes a nested
 `.gitignore` apply to its own subtree only.
+
+`needs_path` is whether any of the patterns looks at the path rather than at the
+entry's own name. Most ignore files hold none, and then a caller that already has
+the name does not have to build a path at all.
 """
 struct IgnoreRules
     prefix::String
     patterns::Vector{IgnorePattern}
+    needs_path::Bool
 end
 
 const IGNORE_REGEX_META = ('\\', '.', '+', '(', ')', '[', ']', '{', '}', '^', '$', '|', '*', '?')
@@ -349,7 +354,10 @@ function parse_ignore_file(content::AbstractString, prefix::AbstractString)
         pattern === nothing || push!(patterns, pattern)
     end
     isempty(patterns) && return nothing
-    return IgnoreRules(String(prefix), patterns)
+    return IgnoreRules(
+        String(prefix), patterns,
+        any(pattern -> pattern.kind === PATH_REGEX, patterns)
+    )
 end
 
 function load_ignore_patterns(path::AbstractString, prefix::AbstractString)

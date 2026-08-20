@@ -137,15 +137,36 @@ function cached_dir_rules(load, matcher::IgnoreMatcher, prefix::AbstractString)
     end
 end
 
+# An absolute path under the root needs the root sliced off the front and nothing
+# else. `relpath` gets the same answer by splitting both paths into components and
+# comparing them, which costs an order of magnitude more, so it is kept for the
+# case this cannot answer: a path that is not under the root at all, where the
+# `..` it produces is what makes the caller's mistake an error.
+function strip_root(matcher::IgnoreMatcher, text::AbstractString)
+    root = matcher.root
+    text == root && return SubString(text, nextind(text, lastindex(text)))
+    if length(text) > length(root) && startswith(text, root)
+        boundary = nextind(text, lastindex(root))
+        endswith(root, '/') && return SubString(text, boundary)
+        text[boundary] == '/' && return SubString(text, nextind(text, boundary))
+    end
+    return normalize_relpath(relpath(abspath(text), root))
+end
+
 # The path split into segments, with the forms that mean the same thing collapsed.
+# The split runs in its own method so that it is specialised on whichever string
+# type it was handed: a variable that is sometimes a `String` and sometimes a
+# view costs an allocation per call at every use of it.
+function root_segments(matcher::IgnoreMatcher, path::AbstractString)
+    text = normalize_relpath(path)
+    isabspath(text) && return split_segments(strip_root(matcher, text), matcher, path)
+    return split_segments(text, matcher, path)
+end
+
 # `..` is rejected rather than resolved: resolving it textually is wrong as soon
 # as a symlink is involved, and resolving it physically would let a query escape
 # the root the caller established.
-function root_segments(matcher::IgnoreMatcher, path::AbstractString)
-    text = normalize_relpath(String(path))
-    if isabspath(path)
-        text = normalize_relpath(relpath(abspath(String(path)), matcher.root))
-    end
+function split_segments(text::AbstractString, matcher::IgnoreMatcher, path::AbstractString)
     segments = String[]
     for segment in eachsplit(text, '/'; keepempty = false)
         segment == "." && continue
