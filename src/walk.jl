@@ -19,10 +19,11 @@ entry_is_dir(entry) = !probe(islink, entry, true) && probe(isdir, entry, false)
 path_is_dir(path::AbstractString) = entry_is_dir(path)
 
 # Each entry of `dir` as `(name, is_dir)`, sorted, which is what both listing
-# functions return by default.
-# Throws if the directory cannot be read; the walk decides what to do.
-function dir_entries(dir::AbstractString)
-    if HAS_READDIRX
+# functions return by default. Throws if the directory cannot be read; the walk
+# decides what to do. `readdirx` is a parameter only so the slow path can be
+# tested on a Julia that still has the fast one.
+function dir_entries(dir::AbstractString, readdirx::Bool = HAS_READDIRX)
+    if readdirx
         return Tuple{String,Bool}[(entry.name, entry_is_dir(entry))
                                   for entry in Base.Filesystem._readdirx(dir)]
     end
@@ -35,9 +36,10 @@ end
         -> (; completed::Bool, skipped::Int)
 
 Walk `start` depth first, pruning ignored entries, and call `f(dir, dirs, files)`
-once per surviving directory with the surviving entry names. `f` returns `false`
-to stop the walk, which makes `completed` false. `start` is the matcher's root by
-default and must be inside it.
+once per surviving directory with the surviving entry names, `dir` absolute. `f`
+returns `false` to stop the walk, which makes `completed` false. `start` is the
+matcher's root by default, and is otherwise either absolute or relative to that
+root, which it has to be inside.
 
 Pruning happens at the directory level, so an ignored directory is never
 descended into. That is git's semantics, where a rule inside an excluded

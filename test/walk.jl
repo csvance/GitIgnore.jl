@@ -174,3 +174,23 @@ end
         @test all(path -> isignored(matcher, path), dropped)
     end
 end
+
+@testset "both directory listing paths agree" begin
+    # The fallback exists for a Julia that drops `_readdirx`, which no supported
+    # version has done yet, so it would otherwise never run.
+    mktempdir() do dir
+        mkpath(joinpath(dir, "sub"))
+        write(joinpath(dir, "file.txt"), "x")
+        write(joinpath(dir, "sub", "inner.txt"), "x")
+        symlink(joinpath(dir, "sub"), joinpath(dir, "link"))
+        symlink(joinpath(dir, "absent"), joinpath(dir, "broken"))
+
+        fast = GitIgnore.dir_entries(dir, true)
+        slow = GitIgnore.dir_entries(dir, false)
+        @test fast == slow
+        # A symlink is a file whatever it points at, or fails to point at.
+        @test ("link", false) in fast
+        @test ("broken", false) in fast
+        @test ("sub", true) in fast
+    end
+end

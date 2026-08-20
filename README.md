@@ -124,10 +124,11 @@ one, and fails on any disagreement. Fourteen hand-built fixtures cover nested
 negation, negation below an excluded directory, symlinks, anchoring and the `**`
 forms, the ignore-everything-then-re-include idiom, repository-local excludes,
 whitespace and CRLF and BOM handling, bracket expressions, POSIX classes, ranges
-a regex engine would reject, non-ASCII names, and rules at five depths. Around
-1,200 further comparisons come from sweeping a table of awkward patterns and a
-deterministically generated set of pattern shapes through the root
-`.gitignore`, a nested `.gitignore`, and `.git/info/exclude`.
+a regex engine would reject, non-ASCII names, and rules at five depths. Around 780
+further sweeps come from a table of 60 awkward patterns and a deterministically
+generated set of pattern shapes, each rewriting one ignore file and re-checking
+every path in a 30 entry tree, run through the root `.gitignore`, a nested
+`.gitignore`, and `.git/info/exclude`: roughly 24,000 path verdicts in all.
 
 The suite skips itself with a message when no git binary is present, so the
 package still tests on a machine without git. A run that skipped it proves

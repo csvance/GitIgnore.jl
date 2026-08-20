@@ -41,7 +41,7 @@ matcher = IgnoreMatcher("/path/to/repo")
 isignored(matcher, "build/out.o")
 
 inmemory = IgnoreMatcher(".", ["" => "*.log\\n", "pkg" => "!keep.log\\n"])
-isignored(inmemory, "pkg/keep.log")
+isignored(inmemory, "pkg/keep.log", false)
 ```
 
 See also [`isignored`](@ref), [`walkfiltered`](@ref).
