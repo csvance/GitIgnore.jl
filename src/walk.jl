@@ -18,17 +18,32 @@ end
 entry_is_dir(entry) = !probe(islink, entry, true) && probe(isdir, entry, false)
 path_is_dir(path::AbstractString) = entry_is_dir(path)
 
-# Each entry of `dir` as `(name, is_dir)`, sorted, which is what both listing
-# functions return by default. Throws if the directory cannot be read; the walk
-# decides what to do. `readdirx` is a parameter only so the slow path can be
-# tested on a Julia that still has the fast one.
+# A listing of `dir`: each entry as `(name, is_dir)`, sorted, which is what both
+# listing functions return by default, plus whether `.git` and `.gitignore` are
+# among the names. The two flags come free here and save the caller a stat each.
+# Throws if the directory cannot be read; the walk decides what to do.
+#
+# `readdirx` is a parameter only so the slow path can be tested on a Julia that
+# still has the fast one.
 function dir_entries(dir::AbstractString, readdirx::Bool = HAS_READDIRX)
+    entries = Tuple{String,Bool}[]
+    gitdir = false
+    ignorefile = false
     if readdirx
-        return Tuple{String,Bool}[(entry.name, entry_is_dir(entry))
-                                  for entry in Base.Filesystem._readdirx(dir)]
+        for entry in Base.Filesystem._readdirx(dir)
+            name = entry.name
+            name == ".git" && (gitdir = true)
+            name == IGNORE_FILE_NAME && (ignorefile = true)
+            push!(entries, (name, entry_is_dir(entry)))
+        end
+    else
+        for name in readdir(dir)
+            name == ".git" && (gitdir = true)
+            name == IGNORE_FILE_NAME && (ignorefile = true)
+            push!(entries, (name, path_is_dir(joinpath(dir, name))))
+        end
     end
-    return Tuple{String,Bool}[(name, path_is_dir(joinpath(dir, name)))
-                              for name in readdir(dir)]
+    return (; entries, gitdir, ignorefile)
 end
 
 """
@@ -80,27 +95,29 @@ function walkfiltered(f, matcher::IgnoreMatcher,
     segments = root_segments(matcher, start)
     start_dir = isempty(segments) ? matcher.root : joinpath(matcher.root, segments...)
     start_rel = join(segments, '/')
-    # Rules for `start` already include its own ignore files; each descent adds
-    # the child's, if it has any.
-    pending = [(start_dir, start_rel, rule_stack(matcher, segments))]
+    # Each directory's own rules are loaded when it is reached rather than when it
+    # is queued, so the listing can answer whether there is anything to load.
+    pending = [(start_dir, start_rel, inherited_stack(matcher, segments))]
     skipped = 0
     while !isempty(pending)
-        dir, dir_rel, rules = pop!(pending)
-        entries = try
+        dir, dir_rel, inherited = pop!(pending)
+        listing = try
             dir_entries(dir)
         catch
             continue
         end
+        own = dir_rules_listed(matcher, dir_rel, dir, listing)
+        rules = isempty(own) ? inherited : vcat(inherited, own)
         dirs = String[]
         files = String[]
         has_rules = !isempty(rules)
-        for (name, is_dir) in entries
+        for (name, is_dir) in listing.entries
             # Checked on the name, before any path is built: on a tree with no
             # rules at all this is the only work the filter does.
             skipgit && name == ".git" && continue
             if has_rules
                 rel = isempty(dir_rel) ? name : "$(dir_rel)/$(name)"
-                if path_ignored(rules, rel, is_dir)
+                if path_ignored(rules, rel, name, is_dir)
                     skipped += 1
                     continue
                 end
@@ -112,9 +129,7 @@ function walkfiltered(f, matcher::IgnoreMatcher,
         # the same order a caller sees the names in.
         for name in Iterators.reverse(dirs)
             child_rel = isempty(dir_rel) ? name : "$(dir_rel)/$(name)"
-            nested = dir_rules(matcher, child_rel)
-            push!(pending, (joinpath(dir, name), child_rel,
-                            isempty(nested) ? rules : vcat(rules, nested)))
+            push!(pending, (joinpath(dir, name), child_rel, rules))
         end
     end
     return (; completed = true, skipped)

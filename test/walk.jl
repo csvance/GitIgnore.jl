@@ -190,8 +190,16 @@ end
         # is the whole reason the slow one is kept.
         GitIgnore.HAS_READDIRX && @test GitIgnore.dir_entries(dir, true) == slow
         # A symlink is a file whatever it points at, or fails to point at.
-        @test ("link", false) in slow
-        @test ("broken", false) in slow
-        @test ("sub", true) in slow
+        @test ("link", false) in slow.entries
+        @test ("broken", false) in slow.entries
+        @test ("sub", true) in slow.entries
+        # The two flags the walk uses instead of stat'ing for those two names.
+        @test !slow.gitdir
+        @test !slow.ignorefile
+        write(joinpath(dir, ".gitignore"), "*.log\n")
+        mkpath(joinpath(dir, ".git"))
+        relisted = GitIgnore.dir_entries(dir, false)
+        @test relisted.gitdir
+        @test relisted.ignorefile
     end
 end

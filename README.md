@@ -78,9 +78,9 @@ Both are the kind of divergence that hides a file the caller needed, silently.
 ## Why not shell out to git
 
 Because it does not scale, and because it fails quietly. On a 14,251 entry tree
-on local disk, one `git check-ignore` process per path costs 19.0 s against
-9.0 ms for the same queries in process, and the pruning walk answers the same
-question in 2.1 ms. Batching every path through one `check-ignore --stdin`
+on local disk, one `git check-ignore` process per path costs 18.6 s against
+4.6 ms for the same queries in process, and the pruning walk answers the same
+question in 1.4 ms. Batching every path through one `check-ignore --stdin`
 process is affordable but cannot prune, so it pays for the whole tree whatever
 the caller wanted. The full table and its method are in
 [BENCHMARKS.md](BENCHMARKS.md).
@@ -140,7 +140,7 @@ package still tests on a machine without git. A run that skipped it proves
 nothing about fidelity.
 
 Generated fixtures are not the same thing as real ignore files, so the same
-comparison was also run once over 24 checkouts on the author's machine: 371,575
+comparison was also run once over 24 checkouts on the author's machine: 371,576
 paths, every one of them checked both ways, with no disagreement. That is a
 one-off check rather than part of the suite, since it depends on which
 repositories happen to be on the machine.

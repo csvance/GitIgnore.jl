@@ -12,15 +12,36 @@ const GIT_EXCLUDE_PATH = (".git", "info", "exclude")
 normalize_relpath(path::AbstractString) = replace(path, '\\' => '/')
 
 """
+What a compiled pattern is matched against.
+
+A pattern body with no `/` in it matches a basename at any depth, and no such
+body can match a `/`: the translation only ever emits `[^/]*`, `[^/]`,
+`(?!/)[...]` and escaped literals. So `^(?:.*/)?BODY\$` against a path is the same
+question as `^BODY\$` against that path's last segment, and the cheap forms of
+that question do not need a regex at all. The one unanchored body that can cross
+a separator is one made of nothing but stars, which compiles to `.*`, so it stays
+a path test.
+
+- `PATH_REGEX`: match `regex` against the path, relative to the declaring
+  directory. Anchored patterns and all-star bodies.
+- `NAME_REGEX`: match `regex` against the entry's own name.
+- `NAME_LITERAL`: the name equals `literal`. This is `Manifest.toml`, `build/`.
+- `NAME_SUFFIX`: the name ends with `literal`. This is `*.log`, `*.o`.
+"""
+@enum PatternKind PATH_REGEX NAME_REGEX NAME_LITERAL NAME_SUFFIX
+
+"""
 One line of a `.gitignore`, compiled.
 
-`regex` matches a path relative to the directory the pattern was declared in,
-with `/` separators and no trailing slash. `negated` is a `!` prefix, which
-re-includes a path an earlier pattern excluded. `dir_only` is a trailing slash,
-which restricts the pattern to directories.
+`regex` is always the faithful translation, and is what the cheaper `kind`s are
+checked against when the differential suite compares the two. `negated` is a `!`
+prefix, which re-includes a path an earlier pattern excluded. `dir_only` is a
+trailing slash, which restricts the pattern to directories.
 """
 struct IgnorePattern
     regex::Regex
+    literal::String
+    kind::PatternKind
     negated::Bool
     dir_only::Bool
 end
@@ -289,9 +310,28 @@ function parse_ignore_line(line::AbstractString)
     anchored = occursin('/', body)
     startswith(body, "/") && (body = body[nextind(body, firstindex(body)):end])
     isempty(body) && return nothing
-    regex = ignore_glob_to_regex(body, anchored)
+    kind, literal = classify_pattern(body, anchored)
+    # A `NAME_` pattern is matched against one path segment, so it wants the
+    # translation without the `(?:.*/)?` that lets a pattern float to any depth.
+    regex = ignore_glob_to_regex(body, kind === PATH_REGEX ? anchored : true)
     regex === nothing && return nothing
-    return IgnorePattern(regex, negated, dir_only)
+    return IgnorePattern(regex, literal, kind, negated, dir_only)
+end
+
+const PATTERN_META = ('*', '?', '[', '\\')
+
+has_meta(body::AbstractString) = any(char -> char in PATTERN_META, body)
+
+# Which of the four ways to match this body, and the literal the cheap two need.
+# See [`PatternKind`](@ref) for why the reduction is sound.
+function classify_pattern(body::AbstractString, anchored::Bool)
+    (anchored || all(==('*'), body)) && return (PATH_REGEX, "")
+    has_meta(body) || return (NAME_LITERAL, String(body))
+    if first(body) == '*'
+        rest = body[nextind(body, firstindex(body)):end]
+        has_meta(rest) || return (NAME_SUFFIX, String(rest))
+    end
+    return (NAME_REGEX, "")
 end
 
 """
@@ -325,56 +365,87 @@ function load_ignore_patterns(path::AbstractString, prefix::AbstractString)
 end
 
 """
-    load_dir_rules(dir, prefix) -> Vector{IgnoreRules}
+    load_dir_rules(dir, prefix; excludes=true, gitdir=true, ignorefile=true)
+        -> Vector{IgnoreRules}
 
 Everything `dir` contributes: its repository-local excludes first, then its
 `.gitignore`, which is the precedence git gives them. A directory contributes
 both because a repository nested below the matcher root is still a repository,
 and picking up its `.gitignore` but not its excludes would honour half its rules.
+
+`gitdir` and `ignorefile` say whether `.git` and `.gitignore` are present. A
+caller holding a listing of `dir` already knows, and neither file can exist
+unless its name is in that listing, so passing false saves a stat that was always
+going to fail. `excludes=false` drops the exclude file whether it exists or not.
 """
-function load_dir_rules(dir::AbstractString, prefix::AbstractString)
+function load_dir_rules(dir::AbstractString, prefix::AbstractString;
+                        excludes::Bool = true, gitdir::Bool = true,
+                        ignorefile::Bool = true)
     rules = IgnoreRules[]
-    excludes = load_ignore_patterns(joinpath(dir, GIT_EXCLUDE_PATH...), prefix)
-    excludes === nothing || push!(rules, excludes)
-    own = load_ignore_patterns(joinpath(dir, IGNORE_FILE_NAME), prefix)
-    own === nothing || push!(rules, own)
+    if excludes && gitdir
+        found = load_ignore_patterns(joinpath(dir, GIT_EXCLUDE_PATH...), prefix)
+        found === nothing || push!(rules, found)
+    end
+    if ignorefile
+        found = load_ignore_patterns(joinpath(dir, IGNORE_FILE_NAME), prefix)
+        found === nothing || push!(rules, found)
+    end
     return rules
 end
 
-# The portion of `rel` that `prefix`'s rules match, or nothing when `rel` lies
-# outside the declaring directory.
-function strip_rules_prefix(rel::AbstractString, prefix::AbstractString)
-    isempty(prefix) && return rel
-    startswith(rel, prefix) || return nothing
+# Whether `rel` is inside the directory `prefix` was declared in.
+function rules_apply(rel::AbstractString, prefix::AbstractString)
+    isempty(prefix) && return true
+    startswith(rel, prefix) || return false
     # `prefix` is a byte-wise prefix of `rel`, so its last index is valid there;
     # the next character must be the separator, or `prefix` merely shares a name
     # fragment with a sibling directory.
     boundary = nextind(rel, lastindex(prefix))
-    boundary > lastindex(rel) && return nothing
-    rel[boundary] == '/' || return nothing
-    return rel[nextind(rel, boundary):end]
+    boundary > lastindex(rel) && return false
+    return rel[boundary] == '/'
+end
+
+# The portion of `rel` that `prefix`'s rules were written to match. A view, not a
+# copy: this runs per rule set per entry on a tree with nested ignore files.
+function strip_rules_prefix(rel::AbstractString, prefix::AbstractString)
+    isempty(prefix) && return SubString(rel)
+    return SubString(rel, nextind(rel, nextind(rel, lastindex(prefix))))
 end
 
 """
-    path_ignored(rules, rel, is_dir) -> Bool
+    path_ignored(rules, rel, name, is_dir) -> Bool
 
-Whether `rel`, a path relative to the matcher root, is excluded by `rules`.
+Whether `rel`, a path relative to the matcher root whose last segment is `name`,
+is excluded by `rules`.
 
 Precedence follows git: a deeper `.gitignore` overrides a shallower one, and
 within one file the last matching line wins, so both loops simply keep
 overwriting the verdict. This decides one path against one rule stack and knows
 nothing about `rel`'s parent directories; [`isignored`](@ref) adds git's rule
 that an excluded directory cannot be re-included from below.
+
+Most patterns are basename tests and never look at `rel` at all, which is what
+[`PatternKind`](@ref) is for.
 """
-function path_ignored(rules::Vector{IgnoreRules}, rel::AbstractString, is_dir::Bool)
+function path_ignored(rules::Vector{IgnoreRules}, rel::AbstractString,
+                      name::AbstractString, is_dir::Bool)
     ignored = false
     for rule_set in rules
+        rules_apply(rel, rule_set.prefix) || continue
         subject = strip_rules_prefix(rel, rule_set.prefix)
-        subject === nothing && continue
         for pattern in rule_set.patterns
             pattern.dir_only && !is_dir && continue
-            occursin(pattern.regex, subject) || continue
-            ignored = !pattern.negated
+            kind = pattern.kind
+            matched = if kind === NAME_LITERAL
+                name == pattern.literal
+            elseif kind === NAME_SUFFIX
+                endswith(name, pattern.literal)
+            elseif kind === NAME_REGEX
+                occursin(pattern.regex, name)
+            else
+                occursin(pattern.regex, subject)
+            end
+            matched && (ignored = !pattern.negated)
         end
     end
     return ignored

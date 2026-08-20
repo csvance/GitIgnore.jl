@@ -85,20 +85,38 @@ ignoreroot(matcher::IgnoreMatcher) = matcher.root
 # directory with no ignore file caches an empty vector, so a second query over
 # the same tree does not stat for it again.
 function dir_rules(matcher::IgnoreMatcher, prefix::AbstractString)
-    matcher.fromdisk || return get(matcher.dircache, prefix, NO_RULES)
-    return lock(matcher.cachelock) do
-        get!(matcher.dircache, prefix) do
-            dir = isempty(prefix) ? matcher.root :
-                  joinpath(matcher.root, split(prefix, '/')...)
-            matcher.excludes ? load_dir_rules(dir, prefix) :
-                               own_dir_rules(dir, prefix)
-        end
+    return cached_dir_rules(matcher, prefix) do
+        dir = isempty(prefix) ? matcher.root :
+              joinpath(matcher.root, split(prefix, '/')...)
+        load_dir_rules(dir, prefix; excludes = matcher.excludes)
     end
 end
 
-function own_dir_rules(dir::AbstractString, prefix::AbstractString)
-    own = load_ignore_patterns(joinpath(dir, IGNORE_FILE_NAME), prefix)
-    return own === nothing ? IgnoreRules[] : IgnoreRules[own]
+"""
+    dir_rules_listed(matcher, prefix, dir, listing) -> Vector{IgnoreRules}
+
+The same thing, for a caller that has just listed `dir` and so already knows
+whether an ignore file is there. That turns two stat calls per directory into two
+string comparisons, which on a tree of a few thousand directories is the largest
+single cost in the walk, and more so on a network filesystem.
+"""
+function dir_rules_listed(matcher::IgnoreMatcher, prefix::AbstractString,
+                          dir::AbstractString, listing)
+    return cached_dir_rules(matcher, prefix) do
+        load_dir_rules(dir, prefix; excludes = matcher.excludes,
+                       gitdir = listing.gitdir, ignorefile = listing.ignorefile)
+    end
+end
+
+# `load` runs only on a miss, which is what keeps the path building out of the
+# common case: the walk already holds the directory path, and a query does not
+# need one unless it is about to read.
+function cached_dir_rules(load, matcher::IgnoreMatcher, prefix::AbstractString)
+    # An explicit matcher was handed its rules and must never read the tree.
+    matcher.fromdisk || return get(matcher.dircache, prefix, NO_RULES)
+    return lock(matcher.cachelock) do
+        get!(load, matcher.dircache, prefix)
+    end
 end
 
 # The path split into segments, with the forms that mean the same thing collapsed.
@@ -120,14 +138,17 @@ function root_segments(matcher::IgnoreMatcher, path::AbstractString)
     return segments
 end
 
-# The rule stack in force *inside* the directory named by `segments`, innermost
-# last. One vector, appended to on the way down, because the stack only ever
-# grows as the walk descends.
-function rule_stack(matcher::IgnoreMatcher, segments::Vector{String})
-    stack = copy(dir_rules(matcher, ""))
+# The rule stack in force in the PARENT of the directory named by `segments`,
+# innermost last. The directory's own rules are left out because the walk picks
+# those up from its listing, and adding them here would load them twice. One
+# vector, appended to on the way down, because the stack only ever grows.
+function inherited_stack(matcher::IgnoreMatcher, segments::Vector{String})
+    stack = IgnoreRules[]
+    isempty(segments) && return stack
+    append!(stack, dir_rules(matcher, ""))
     prefix = ""
-    for segment in segments
-        prefix = isempty(prefix) ? segment : "$(prefix)/$(segment)"
+    for index in 1:(length(segments) - 1)
+        prefix = isempty(prefix) ? segments[index] : "$(prefix)/$(segments[index])"
         append!(stack, dir_rules(matcher, prefix))
     end
     return stack
@@ -172,11 +193,11 @@ function isignored(matcher::IgnoreMatcher, path::AbstractString, is_dir::Bool)
     rel = ""
     for index in 1:(length(segments) - 1)
         rel = isempty(rel) ? segments[index] : "$(rel)/$(segments[index])"
-        path_ignored(stack, rel, true) && return true
+        path_ignored(stack, rel, segments[index], true) && return true
         append!(stack, dir_rules(matcher, rel))
     end
     rel = isempty(rel) ? segments[end] : "$(rel)/$(segments[end])"
-    return path_ignored(stack, rel, is_dir)
+    return path_ignored(stack, rel, segments[end], is_dir)
 end
 
 isignored(matcher::IgnoreMatcher, path::AbstractString) =
