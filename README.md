@@ -139,6 +139,12 @@ The suite skips itself with a message when no git binary is present, so the
 package still tests on a machine without git. A run that skipped it proves
 nothing about fidelity.
 
+Generated fixtures are not the same thing as real ignore files, so the same
+comparison was also run once over 24 checkouts on the author's machine: 371,575
+paths, every one of them checked both ways, with no disagreement. That is a
+one-off check rather than part of the suite, since it depends on which
+repositories happen to be on the machine.
+
 What the guarantee does not cover: the exclusions listed above, git versions
 other than the one the suite happened to run against, and platforms other than
 the one it ran on. Two known translation limits are that `[=a=]` and `[.a.]`
