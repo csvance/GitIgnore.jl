@@ -32,8 +32,10 @@ function main(repos)
         walked = GitOracle.walk_disagreements(repo)
         total_paths += length(paths)
         total_bad += length(queries) + length(walked)
-        @printf("%-30s %8d paths  %3d query  %3d walk\n",
-                basename(rstrip(repo, '/')), length(paths), length(queries), length(walked))
+        @printf(
+            "%-30s %8d paths  %3d query  %3d walk\n",
+            basename(rstrip(repo, '/')), length(paths), length(queries), length(walked)
+        )
         for line in Iterators.take(queries, 5)
             println("    query: ", line)
         end
@@ -41,8 +43,10 @@ function main(repos)
             println("    walk:  ", line)
         end
     end
-    @printf("\n%d paths over %d repositories, %d disagreements\n",
-            total_paths, length(repos), total_bad)
+    @printf(
+        "\n%d paths over %d repositories, %d disagreements\n",
+        total_paths, length(repos), total_bad
+    )
     return total_bad
 end
 

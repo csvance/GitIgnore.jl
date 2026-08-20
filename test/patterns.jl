@@ -135,8 +135,10 @@ end
 
     # A `-` just after a range is a literal, not the start of another.
     dashed = inline("[a-c-e].txt")
-    @test all(name -> isignored(dashed, name, false),
-              ("a.txt", "b.txt", "c.txt", "e.txt", "-.txt"))
+    @test all(
+        name -> isignored(dashed, name, false),
+        ("a.txt", "b.txt", "c.txt", "e.txt", "-.txt")
+    )
     @test !isignored(dashed, "d.txt", false)
 
     # An escape inside a class quotes a literal and nothing else, so `\\d` is the

@@ -14,12 +14,14 @@ const GIT = Sys.which("git")
 # A fake home, so no per-user ignore file or config reaches the oracle.
 const SANDBOX_HOME = mktempdir(; cleanup = true)
 
-gitenv() = ["GIT_CONFIG_GLOBAL" => "/dev/null",
-            "GIT_CONFIG_SYSTEM" => "/dev/null",
-            "GIT_CONFIG_NOSYSTEM" => "1",
-            "HOME" => SANDBOX_HOME,
-            "XDG_CONFIG_HOME" => SANDBOX_HOME,
-            "GIT_TERMINAL_PROMPT" => "0"]
+gitenv() = [
+    "GIT_CONFIG_GLOBAL" => "/dev/null",
+    "GIT_CONFIG_SYSTEM" => "/dev/null",
+    "GIT_CONFIG_NOSYSTEM" => "1",
+    "HOME" => SANDBOX_HOME,
+    "XDG_CONFIG_HOME" => SANDBOX_HOME,
+    "GIT_TERMINAL_PROMPT" => "0",
+]
 
 function available()
     GIT === nothing && return false
@@ -31,7 +33,7 @@ function available()
 end
 
 version() = GIT === nothing ? "absent" :
-            strip(read(setenv(`$(GIT) --version`, gitenv()), String))
+    strip(read(setenv(`$(GIT) --version`, gitenv()), String))
 
 """
     withrepo(f) -> whatever `f` returns
@@ -62,7 +64,7 @@ initrepo(dir::AbstractString) =
 # still a disagreement. `.git` is reported but not descended into: git answers
 # for `.git` itself and refuses paths beyond a symlink, so neither is followed.
 function tree_paths(repo::AbstractString)
-    found = Tuple{String,Bool}[]
+    found = Tuple{String, Bool}[]
     stack = [""]
     while !isempty(stack)
         prefix = pop!(stack)
@@ -90,8 +92,12 @@ invocation covers every path.
 """
 function ignored_paths(repo::AbstractString, paths::AbstractVector{<:AbstractString})
     isempty(paths) && return Set{String}()
-    cmd = ignorestatus(setenv(Cmd(`$(GIT) check-ignore --no-index --stdin -z`; dir = repo),
-                              gitenv()))
+    cmd = ignorestatus(
+        setenv(
+            Cmd(`$(GIT) check-ignore --no-index --stdin -z`; dir = repo),
+            gitenv()
+        )
+    )
     out, err = IOBuffer(), IOBuffer()
     input = IOBuffer(join(paths, '\0') * '\0')
     process = run(pipeline(cmd; stdin = input, stdout = out, stderr = err))
@@ -104,8 +110,12 @@ end
 
 # Why git ruled the way it did, for a failure message.
 function explain(repo::AbstractString, path::AbstractString)
-    cmd = ignorestatus(setenv(Cmd(`$(GIT) check-ignore --no-index -v -- $(path)`; dir = repo),
-                              gitenv()))
+    cmd = ignorestatus(
+        setenv(
+            Cmd(`$(GIT) check-ignore --no-index -v -- $(path)`; dir = repo),
+            gitenv()
+        )
+    )
     out = IOBuffer()
     run(pipeline(cmd; stdout = out, stderr = devnull))
     detail = strip(String(take!(out)))
@@ -127,10 +137,14 @@ function disagreements(repo::AbstractString; kwargs...)
     for (rel, is_dir) in paths
         mine = isignored(matcher, rel, is_dir)
         mine == (rel in theirs) && continue
-        push!(report, string(rel, is_dir ? "/" : "", ": GitIgnore says ",
-                             mine ? "ignored" : "not ignored",
-                             ", git says ", mine ? "not ignored" : "ignored",
-                             " (", explain(repo, rel), ")"))
+        push!(
+            report, string(
+                rel, is_dir ? "/" : "", ": GitIgnore says ",
+                mine ? "ignored" : "not ignored",
+                ", git says ", mine ? "not ignored" : "ignored",
+                " (", explain(repo, rel), ")"
+            )
+        )
     end
     return report
 end
@@ -164,9 +178,13 @@ function walk_disagreements(repo::AbstractString)
     for (rel, is_dir) in paths
         expected = !(rel in theirs) && !(".git" in split(rel, '/'))
         expected == (rel in surviving) && continue
-        push!(report, string(rel, is_dir ? "/" : "",
-                             rel in surviving ? ": walked, git calls it ignored" :
-                                                ": pruned, git calls it visible"))
+        push!(
+            report, string(
+                rel, is_dir ? "/" : "",
+                rel in surviving ? ": walked, git calls it ignored" :
+                    ": pruned, git calls it visible"
+            )
+        )
     end
     return report
 end
@@ -181,8 +199,10 @@ negation has something to negate. One repository and one `git`
 invocation per pattern is what makes a few hundred patterns affordable; a fresh
 matcher per pattern is required, since a matcher caches the rules it has read.
 """
-function sweep(patterns, build; into::AbstractString = ".gitignore",
-               alongside::AbstractString = "")
+function sweep(
+        patterns, build; into::AbstractString = ".gitignore",
+        alongside::AbstractString = ""
+    )
     return withrepo() do repo
         build(repo)
         target = joinpath(repo, split(into, '/')...)

@@ -152,8 +152,10 @@ end
         mkpath(joinpath(dir, "vendor", "lib"))
         write(joinpath(dir, ".gitignore"), "build/\n*.log\n!keep.log\nvendor\n")
         write(joinpath(dir, "src", ".gitignore"), "deep/\n")
-        for path in ("top.jl", "keep.log", "a.log", "src/main.jl", "src/app.log",
-                     "build/out.jl", "vendor/lib/x.jl", "src/deep/y.jl")
+        for path in (
+                "top.jl", "keep.log", "a.log", "src/main.jl", "src/app.log",
+                "build/out.jl", "vendor/lib/x.jl", "src/deep/y.jl",
+            )
             write(joinpath(dir, split(path, '/')...), "x")
         end
 

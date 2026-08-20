@@ -378,9 +378,11 @@ caller holding a listing of `dir` already knows, and neither file can exist
 unless its name is in that listing, so passing false saves a stat that was always
 going to fail. `excludes=false` drops the exclude file whether it exists or not.
 """
-function load_dir_rules(dir::AbstractString, prefix::AbstractString;
-                        excludes::Bool = true, gitdir::Bool = true,
-                        ignorefile::Bool = true)
+function load_dir_rules(
+        dir::AbstractString, prefix::AbstractString;
+        excludes::Bool = true, gitdir::Bool = true,
+        ignorefile::Bool = true
+    )
     rules = IgnoreRules[]
     if excludes && gitdir
         found = load_ignore_patterns(joinpath(dir, GIT_EXCLUDE_PATH...), prefix)
@@ -427,8 +429,10 @@ that an excluded directory cannot be re-included from below.
 Most patterns are basename tests and never look at `rel` at all, which is what
 [`PatternKind`](@ref) is for.
 """
-function path_ignored(rules::Vector{IgnoreRules}, rel::AbstractString,
-                      name::AbstractString, is_dir::Bool)
+function path_ignored(
+        rules::Vector{IgnoreRules}, rel::AbstractString,
+        name::AbstractString, is_dir::Bool
+    )
     ignored = false
     for rule_set in rules
         rules_apply(rel, rule_set.prefix) || continue

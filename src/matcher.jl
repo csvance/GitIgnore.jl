@@ -50,16 +50,19 @@ struct IgnoreMatcher
     root::String
     excludes::Bool
     fromdisk::Bool
-    dircache::Dict{String,Vector{IgnoreRules}}
+    dircache::Dict{String, Vector{IgnoreRules}}
     cachelock::ReentrantLock
 end
 
-IgnoreMatcher(root::AbstractString; excludes::Bool = true) =
-    IgnoreMatcher(abspath(String(root)), excludes, true,
-                  Dict{String,Vector{IgnoreRules}}(), ReentrantLock())
+function IgnoreMatcher(root::AbstractString; excludes::Bool = true)
+    return IgnoreMatcher(
+        abspath(String(root)), excludes, true,
+        Dict{String, Vector{IgnoreRules}}(), ReentrantLock()
+    )
+end
 
 function IgnoreMatcher(root::AbstractString, sources)
-    cache = Dict{String,Vector{IgnoreRules}}()
+    cache = Dict{String, Vector{IgnoreRules}}()
     for source in sources
         prefix = normalize_relpath(String(first(source)))
         prefix = prefix == "." ? "" : rstrip(prefix, '/')
@@ -70,9 +73,12 @@ function IgnoreMatcher(root::AbstractString, sources)
     return IgnoreMatcher(abspath(String(root)), true, false, cache, ReentrantLock())
 end
 
-Base.show(io::IO, matcher::IgnoreMatcher) =
-    print(io, "IgnoreMatcher(", repr(matcher.root),
-          matcher.fromdisk ? "" : ", <explicit rules>", ")")
+function Base.show(io::IO, matcher::IgnoreMatcher)
+    return print(
+        io, "IgnoreMatcher(", repr(matcher.root),
+        matcher.fromdisk ? "" : ", <explicit rules>", ")"
+    )
+end
 
 """
     ignoreroot(matcher) -> String
@@ -87,7 +93,7 @@ ignoreroot(matcher::IgnoreMatcher) = matcher.root
 function dir_rules(matcher::IgnoreMatcher, prefix::AbstractString)
     return cached_dir_rules(matcher, prefix) do
         dir = isempty(prefix) ? matcher.root :
-              joinpath(matcher.root, split(prefix, '/')...)
+            joinpath(matcher.root, split(prefix, '/')...)
         load_dir_rules(dir, prefix; excludes = matcher.excludes)
     end
 end
@@ -100,11 +106,15 @@ whether an ignore file is there. That turns two stat calls per directory into tw
 string comparisons, which on a tree of a few thousand directories is the largest
 single cost in the walk, and more so on a network filesystem.
 """
-function dir_rules_listed(matcher::IgnoreMatcher, prefix::AbstractString,
-                          dir::AbstractString, listing)
+function dir_rules_listed(
+        matcher::IgnoreMatcher, prefix::AbstractString,
+        dir::AbstractString, listing
+    )
     return cached_dir_rules(matcher, prefix) do
-        load_dir_rules(dir, prefix; excludes = matcher.excludes,
-                       gitdir = listing.gitdir, ignorefile = listing.ignorefile)
+        load_dir_rules(
+            dir, prefix; excludes = matcher.excludes,
+            gitdir = listing.gitdir, ignorefile = listing.ignorefile
+        )
     end
 end
 
@@ -131,8 +141,11 @@ function root_segments(matcher::IgnoreMatcher, path::AbstractString)
     segments = String[]
     for segment in eachsplit(text, '/'; keepempty = false)
         segment == "." && continue
-        segment == ".." && throw(ArgumentError(
-            "path $(repr(String(path))) is not inside the matcher root $(repr(matcher.root))"))
+        segment == ".." && throw(
+            ArgumentError(
+                "path $(repr(String(path))) is not inside the matcher root $(repr(matcher.root))"
+            )
+        )
         push!(segments, String(segment))
     end
     return segments
@@ -201,5 +214,9 @@ function isignored(matcher::IgnoreMatcher, path::AbstractString, is_dir::Bool)
 end
 
 isignored(matcher::IgnoreMatcher, path::AbstractString) =
-    isignored(matcher, path, path_is_dir(isabspath(path) ? String(path) :
-                                        joinpath(matcher.root, String(path))))
+    isignored(
+    matcher, path, path_is_dir(
+        isabspath(path) ? String(path) :
+            joinpath(matcher.root, String(path))
+    )
+)

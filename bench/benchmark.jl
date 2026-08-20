@@ -16,13 +16,17 @@ using Statistics
 const FULL = "--full" in ARGS
 const SAMPLE = 300
 
-const GITENV = ["GIT_CONFIG_GLOBAL" => "/dev/null",
-                "GIT_CONFIG_SYSTEM" => "/dev/null",
-                "GIT_CONFIG_NOSYSTEM" => "1"]
+const GITENV = [
+    "GIT_CONFIG_GLOBAL" => "/dev/null",
+    "GIT_CONFIG_SYSTEM" => "/dev/null",
+    "GIT_CONFIG_NOSYSTEM" => "1",
+]
 
 function build_tree(root::AbstractString)
-    write(joinpath(root, ".gitignore"),
-          "build/\nnode_modules/\n*.log\n!keep.log\n*.o\n")
+    write(
+        joinpath(root, ".gitignore"),
+        "build/\nnode_modules/\n*.log\n!keep.log\n*.o\n"
+    )
     for group in 1:40
         dir = joinpath(root, "src", "group$(group)")
         mkpath(dir)
@@ -87,7 +91,7 @@ function walk_count(matcher, root)
 end
 
 function main()
-    mktempdir() do root
+    return mktempdir() do root
         print("building the fixture tree ... ")
         build_tree(root)
         run(setenv(`git init -q -b main $(root)`, GITENV))
@@ -107,20 +111,36 @@ function main()
 
         batched = best() do
             input = IOBuffer(join(paths, '\0') * '\0')
-            cmd = ignorestatus(setenv(Cmd(`git check-ignore --no-index --stdin -z`;
-                                          dir = root), GITENV))
+            cmd = ignorestatus(
+                setenv(
+                    Cmd(
+                        `git check-ignore --no-index --stdin -z`;
+                        dir = root
+                    ), GITENV
+                )
+            )
             run(pipeline(cmd; stdin = input, stdout = devnull, stderr = devnull))
         end
         listing = best() do
-            cmd = setenv(Cmd(`git ls-files -o -i --exclude-standard --directory`;
-                             dir = root), GITENV)
+            cmd = setenv(
+                Cmd(
+                    `git ls-files -o -i --exclude-standard --directory`;
+                    dir = root
+                ), GITENV
+            )
             run(pipeline(cmd; stdout = devnull, stderr = devnull))
         end
 
         sampled = FULL ? paths : paths[1:min(SAMPLE, length(paths))]
         per_path = @elapsed for path in sampled
-            cmd = ignorestatus(setenv(Cmd(`git check-ignore --no-index -q -- $(path)`;
-                                          dir = root), GITENV))
+            cmd = ignorestatus(
+                setenv(
+                    Cmd(
+                        `git check-ignore --no-index -q -- $(path)`;
+                        dir = root
+                    ), GITENV
+                )
+            )
             run(pipeline(cmd; stdout = devnull, stderr = devnull))
         end
         scaled = per_path / length(sampled) * length(paths)
@@ -134,12 +154,16 @@ function main()
         @printf("%-46s %10.4f %11.1fx\n", "isignored for every entry, no pruning", queries, queries / walk)
         @printf("%-46s %10.4f %11.1fx\n", "git check-ignore --stdin, one process", batched, batched / walk)
         @printf("%-46s %10.4f %11.1fx\n", "git ls-files -o -i --directory", listing, listing / walk)
-        @printf("%-46s %10.4f %11.1fx\n",
-                FULL ? "git check-ignore, one process per path" :
-                       "git check-ignore per path, extrapolated",
-                scaled, scaled / walk)
-        @printf("\nper-path subprocess cost: %.3f ms (%d sampled)\n",
-                per_path / length(sampled) * 1000, length(sampled))
+        @printf(
+            "%-46s %10.4f %11.1fx\n",
+            FULL ? "git check-ignore, one process per path" :
+                "git check-ignore per path, extrapolated",
+            scaled, scaled / walk
+        )
+        @printf(
+            "\nper-path subprocess cost: %.3f ms (%d sampled)\n",
+            per_path / length(sampled) * 1000, length(sampled)
+        )
         @printf("julia %s, %s\n", VERSION, strip(read(setenv(`git --version`, GITENV), String)))
     end
 end

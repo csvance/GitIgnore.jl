@@ -6,33 +6,39 @@ include("gitoracle.jl")
 # Fixtures for the differential suite. Each lays out a tree and its ignore files;
 # the harness then asks this package and `git check-ignore` about every path in
 # it and fails on any disagreement.
-const FIXTURES = Pair{String,Function}[
+const FIXTURES = Pair{String, Function}[
     "the classic build tree" => function (dir)
         mkpath(joinpath(dir, "src"))
         mkpath(joinpath(dir, "build", "deep"))
         mkpath(joinpath(dir, "vendor"))
         write(joinpath(dir, ".gitignore"), "build/\n*.log\n!keep.log\nvendor\n")
-        for path in ("top.jl", "keep.log", "a.log", "src/main.jl", "src/app.log",
-                     "build/out.jl", "build/deep/x.jl", "vendor/lib.jl")
+        for path in (
+                "top.jl", "keep.log", "a.log", "src/main.jl", "src/app.log",
+                "build/out.jl", "build/deep/x.jl", "vendor/lib.jl",
+            )
             write(joinpath(dir, split(path, '/')...), "x")
         end
+        return
     end,
     "a negation in a nested .gitignore" => function (dir)
         mkpath(joinpath(dir, "pkg", "local"))
         mkpath(joinpath(dir, "other"))
         write(joinpath(dir, ".gitignore"), "*.tmp\n")
         write(joinpath(dir, "pkg", ".gitignore"), "!important.tmp\nlocal/\n")
-        for path in ("pkg/important.tmp", "pkg/scratch.tmp", "pkg/local/cache.jl",
-                     "other/important.tmp", "pkg/src.jl")
+        for path in (
+                "pkg/important.tmp", "pkg/scratch.tmp", "pkg/local/cache.jl",
+                "other/important.tmp", "pkg/src.jl",
+            )
             write(joinpath(dir, split(path, '/')...), "x")
         end
+        return
     end,
     "a negation below an excluded directory" => function (dir)
         mkpath(joinpath(dir, "build", "deep"))
         write(joinpath(dir, ".gitignore"), "build/\n")
         write(joinpath(dir, "build", ".gitignore"), "!keep.txt\n!deep/\n")
         write(joinpath(dir, "build", "keep.txt"), "x")
-        write(joinpath(dir, "build", "deep", "x.jl"), "x")
+        return write(joinpath(dir, "build", "deep", "x.jl"), "x")
     end,
     "symlinks are files however they resolve" => function (dir)
         mkpath(joinpath(dir, "real"))
@@ -40,29 +46,37 @@ const FIXTURES = Pair{String,Function}[
         write(joinpath(dir, "plain.o"), "x")
         symlink(joinpath(dir, "real"), joinpath(dir, "link"))
         symlink(joinpath(dir, "plain.o"), joinpath(dir, "alias.o"))
-        write(joinpath(dir, ".gitignore"), "link/\n*.o\nreal/\n")
+        return write(joinpath(dir, ".gitignore"), "link/\n*.o\nreal/\n")
     end,
     "anchoring and the star forms" => function (dir)
         mkpath(joinpath(dir, "a", "b", "x"))
         mkpath(joinpath(dir, "logs", "deep"))
         mkpath(joinpath(dir, "docs", "guide", "build"))
         mkpath(joinpath(dir, "src", "logs"))
-        write(joinpath(dir, ".gitignore"),
-              "/top.jl\nsrc/*.jl\na/**/c\nlogs/**\ndocs/**/build/\n**/*.min.js\n")
-        for path in ("top.jl", "src/top.jl", "src/main.jl", "src/deep.txt",
-                     "a/c", "a/b/c", "a/b/x/c", "logs/a.log", "logs/deep/b.log",
-                     "docs/guide/build/index.html", "app.min.js", "src/app.min.js")
+        write(
+            joinpath(dir, ".gitignore"),
+            "/top.jl\nsrc/*.jl\na/**/c\nlogs/**\ndocs/**/build/\n**/*.min.js\n"
+        )
+        for path in (
+                "top.jl", "src/top.jl", "src/main.jl", "src/deep.txt",
+                "a/c", "a/b/c", "a/b/x/c", "logs/a.log", "logs/deep/b.log",
+                "docs/guide/build/index.html", "app.min.js", "src/app.min.js",
+            )
             write(joinpath(dir, split(path, '/')...), "x")
         end
+        return
     end,
     "the ignore-everything-then-re-include idiom" => function (dir)
         mkpath(joinpath(dir, "src", "deep"))
         mkpath(joinpath(dir, "extra"))
         write(joinpath(dir, ".gitignore"), "/*\n!/src/\n!*.jl\n!.gitignore\n")
-        for path in ("top.jl", "top.txt", "src/main.jl", "src/notes.txt",
-                     "src/deep/x.jl", "extra/y.jl")
+        for path in (
+                "top.jl", "top.txt", "src/main.jl", "src/notes.txt",
+                "src/deep/x.jl", "extra/y.jl",
+            )
             write(joinpath(dir, split(path, '/')...), "x")
         end
+        return
     end,
     "repository-local excludes" => function (dir)
         mkpath(joinpath(dir, ".git", "info"))
@@ -72,38 +86,57 @@ const FIXTURES = Pair{String,Function}[
         for path in ("secret.txt", "public.txt", "notes.bak", "a.log", "sub/secret.txt")
             write(joinpath(dir, split(path, '/')...), "x")
         end
+        return
     end,
     "whitespace, tabs, CRLF and a BOM" => function (dir)
-        write(joinpath(dir, ".gitignore"),
-              "\ufeff*.log\r\ntrailing.txt   \nspace\\ \ntabbed.txt\t\n#comment\n\\#hash\n")
-        for name in ("a.log", "trailing.txt", "space ", "tabbed.txt\t", "tabbed.txt",
-                     "#hash", "keep.txt")
+        write(
+            joinpath(dir, ".gitignore"),
+            "\ufeff*.log\r\ntrailing.txt   \nspace\\ \ntabbed.txt\t\n#comment\n\\#hash\n"
+        )
+        for name in (
+                "a.log", "trailing.txt", "space ", "tabbed.txt\t", "tabbed.txt",
+                "#hash", "keep.txt",
+            )
             write(joinpath(dir, name), "x")
         end
+        return
     end,
     "bracket expressions and POSIX classes" => function (dir)
-        write(joinpath(dir, ".gitignore"),
-              "[abc].txt\n[]x].txt\n[!a-c].log\n[[:digit:]].dat\n[a-].md\n[\\]].dat\n")
-        for name in ("a.txt", "d.txt", "].txt", "x.txt", "a.log", "z.log",
-                     "1.dat", "a.dat", "].dat", "-.md", "a.md", "z.md")
+        write(
+            joinpath(dir, ".gitignore"),
+            "[abc].txt\n[]x].txt\n[!a-c].log\n[[:digit:]].dat\n[a-].md\n[\\]].dat\n"
+        )
+        for name in (
+                "a.txt", "d.txt", "].txt", "x.txt", "a.log", "z.log",
+                "1.dat", "a.dat", "].dat", "-.md", "a.md", "z.md",
+            )
             write(joinpath(dir, name), "x")
         end
+        return
     end,
     "bracket ranges a regex engine would reject" => function (dir)
-        write(joinpath(dir, ".gitignore"),
-              "[c-a].txt\n[a-\\d].txt\n[9-0].txt\n[\\w-z].txt\n[a-c-e].txt\nfoo\\\n[abc\na[b.txt\n*.log\n")
-        for name in ("a.txt", "b.txt", "c.txt", "d.txt", "e.txt", "-.txt", "0.txt",
-                     "9.txt", "w.txt", "x.txt", "z.txt", "foo", "abc", "ab.txt", "b.log")
+        write(
+            joinpath(dir, ".gitignore"),
+            "[c-a].txt\n[a-\\d].txt\n[9-0].txt\n[\\w-z].txt\n[a-c-e].txt\nfoo\\\n[abc\na[b.txt\n*.log\n"
+        )
+        for name in (
+                "a.txt", "b.txt", "c.txt", "d.txt", "e.txt", "-.txt", "0.txt",
+                "9.txt", "w.txt", "x.txt", "z.txt", "foo", "abc", "ab.txt", "b.log",
+            )
             write(joinpath(dir, name), "x")
         end
+        return
     end,
     "non-ASCII names and patterns" => function (dir)
         mkpath(joinpath(dir, "日本"))
         write(joinpath(dir, ".gitignore"), "café*\n日本/*.md\nünïcode?.txt\n")
-        for path in ("café-notes", "cafe-notes", "日本/notes.md", "日本/notes.jl",
-                     "ünïcodeX.txt", "ünïcode.txt")
+        for path in (
+                "café-notes", "cafe-notes", "日本/notes.md", "日本/notes.jl",
+                "ünïcodeX.txt", "ünïcode.txt",
+            )
             write(joinpath(dir, split(path, '/')...), "x")
         end
+        return
     end,
     "a directory and a file sharing one name" => function (dir)
         mkpath(joinpath(dir, "name"))
@@ -113,7 +146,7 @@ const FIXTURES = Pair{String,Function}[
             write(joinpath(dir, split(path, '/')...), "x")
         end
         mkpath(joinpath(dir, "otherdir"))
-        write(joinpath(dir, "otherdir", "x.txt"), "x")
+        return write(joinpath(dir, "otherdir", "x.txt"), "x")
     end,
     "a nested repository below the root" => function (dir)
         # git run from above a nested repository still reads its `.gitignore`,
@@ -126,6 +159,7 @@ const FIXTURES = Pair{String,Function}[
         for path in ("outer.a", "sub/x.a", "sub/x.b", "sub/keep.b", "sub/inner/y.b")
             write(joinpath(dir, split(path, '/')...), "x")
         end
+        return
     end,
     "deep trees with rules at several levels" => function (dir)
         write(joinpath(dir, ".gitignore"), "*.o\nbuild/\n")
@@ -137,7 +171,7 @@ const FIXTURES = Pair{String,Function}[
             write(joinpath(path, ".gitignore"), level == 3 ? "!a.o\n*.jl\n" : "\n")
         end
         mkpath(joinpath(dir, "level", "build", "deep"))
-        write(joinpath(dir, "level", "build", "deep", "x.o"), "x")
+        return write(joinpath(dir, "level", "build", "deep", "x.o"), "x")
     end,
 ]
 
@@ -167,9 +201,11 @@ end
 
 pick(rng::Lcg, choices) = choices[draw!(rng, length(choices))]
 
-const ATOMS = ["a", "b", "ab", "c.txt", "sub", "deep", "*", "**", "?", "*.txt",
-               "[abc]", "[!abc]", "[a-c]", "[[:digit:]]", "[]a]", "[b-a]", "x*",
-               "sp?ce.txt", "café*", "*.log", "node_modules"]
+const ATOMS = [
+    "a", "b", "ab", "c.txt", "sub", "deep", "*", "**", "?", "*.txt",
+    "[abc]", "[!abc]", "[a-c]", "[[:digit:]]", "[]a]", "[b-a]", "x*",
+    "sp?ce.txt", "café*", "*.log", "node_modules",
+]
 const PREFIXES = ["", "/", "!", "!/", "**/", "!**/"]
 const SUFFIXES = ["", "/", "/**"]
 
@@ -190,11 +226,13 @@ function sweep_tree(dir::AbstractString)
     for sub in ("dir/sub", "other", "node_modules/pkg", "logs/deep", "ab", "deep/dir")
         mkpath(joinpath(dir, split(sub, '/')...))
     end
-    for path in ("a", "b", "a.txt", "b.txt", "1.txt", "x.tmp", "-.txt", "].txt",
-                 "[.txt", "sp ace.txt", "café.txt", "dir/a.txt", "dir/a",
-                 "dir/sub/a.txt", "dir/sub/b", "other/a.txt", "ab/c.txt",
-                 "node_modules/pkg/index.js", "logs/a.log", "logs/deep/b.log",
-                 "deep/dir/a.txt", "deep/dir/x.tmp")
+    for path in (
+            "a", "b", "a.txt", "b.txt", "1.txt", "x.tmp", "-.txt", "].txt",
+            "[.txt", "sp ace.txt", "café.txt", "dir/a.txt", "dir/a",
+            "dir/sub/a.txt", "dir/sub/b", "other/a.txt", "ab/c.txt",
+            "node_modules/pkg/index.js", "logs/a.log", "logs/deep/b.log",
+            "deep/dir/a.txt", "deep/dir/x.tmp",
+        )
         write(joinpath(dir, split(path, '/')...), "x")
     end
     return dir
@@ -203,7 +241,7 @@ end
 @testset "differential against real git" begin
     if !GitOracle.available()
         @info "no usable git binary on PATH: the differential suite is skipped, " *
-              "so this run proves nothing about fidelity to git"
+            "so this run proves nothing about fidelity to git"
     else
         @info "differential suite oracle: $(GitOracle.version())"
 
@@ -231,17 +269,23 @@ end
         # negation to argue with. This is the region where libgit2 gets nested
         # precedence wrong, so it is the region worth sweeping hardest.
         @testset "swept in a nested .gitignore" begin
-            @test GitOracle.sweep(TABLE_PATTERNS, sweep_tree;
-                                  into = "dir/.gitignore",
-                                  alongside = "*.txt\n*.log\n") == String[]
-            @test GitOracle.sweep(generated_patterns(200; seed = 0x1234_5678_9abc_def1),
-                                  sweep_tree; into = "dir/.gitignore",
-                                  alongside = "*.txt\n*.log\n") == String[]
+            @test GitOracle.sweep(
+                TABLE_PATTERNS, sweep_tree;
+                into = "dir/.gitignore",
+                alongside = "*.txt\n*.log\n"
+            ) == String[]
+            @test GitOracle.sweep(
+                generated_patterns(200; seed = 0x1234_5678_9abc_def1),
+                sweep_tree; into = "dir/.gitignore",
+                alongside = "*.txt\n*.log\n"
+            ) == String[]
         end
 
         @testset "swept in .git/info/exclude" begin
-            @test GitOracle.sweep(TABLE_PATTERNS, sweep_tree;
-                                  into = ".git/info/exclude") == String[]
+            @test GitOracle.sweep(
+                TABLE_PATTERNS, sweep_tree;
+                into = ".git/info/exclude"
+            ) == String[]
         end
     end
 end
@@ -271,8 +315,12 @@ end
         @test isignored(matcher, "other/important.tmp")
 
         if GitOracle.available()
-            theirs = GitOracle.ignored_paths(dir, ["pkg/important.tmp", "pkg/scratch.tmp",
-                                                   "other/important.tmp"])
+            theirs = GitOracle.ignored_paths(
+                dir, [
+                    "pkg/important.tmp", "pkg/scratch.tmp",
+                    "other/important.tmp",
+                ]
+            )
             @test theirs == Set(["pkg/scratch.tmp", "other/important.tmp"])
         end
     end

@@ -174,8 +174,10 @@ end
     mktempdir() do dir
         build_tree(dir)
         matcher = IgnoreMatcher(dir)
-        paths = ["src/app.log", "src/main.jl", "pkg/important.tmp", "pkg/scratch.tmp",
-                 "build/deep/x.jl", "top.jl", "keep.log", "pkg/local/cache.jl"]
+        paths = [
+            "src/app.log", "src/main.jl", "pkg/important.tmp", "pkg/scratch.tmp",
+            "build/deep/x.jl", "top.jl", "keep.log", "pkg/local/cache.jl",
+        ]
         expected = [isignored(matcher, p, false) for p in paths]
         for _ in 1:8
             fresh = IgnoreMatcher(dir)

@@ -26,7 +26,7 @@ path_is_dir(path::AbstractString) = entry_is_dir(path)
 # `readdirx` is a parameter only so the slow path can be tested on a Julia that
 # still has the fast one.
 function dir_entries(dir::AbstractString, readdirx::Bool = HAS_READDIRX)
-    entries = Tuple{String,Bool}[]
+    entries = Tuple{String, Bool}[]
     gitdir = false
     ignorefile = false
     if readdirx
@@ -89,9 +89,11 @@ walkfiltered(matcher, repo) do dir, dirs, files
 end
 ```
 """
-function walkfiltered(f, matcher::IgnoreMatcher,
-                      start::AbstractString = ignoreroot(matcher);
-                      skipgit::Bool = true)
+function walkfiltered(
+        f, matcher::IgnoreMatcher,
+        start::AbstractString = ignoreroot(matcher);
+        skipgit::Bool = true
+    )
     segments = root_segments(matcher, start)
     start_dir = isempty(segments) ? matcher.root : joinpath(matcher.root, segments...)
     start_rel = join(segments, '/')
