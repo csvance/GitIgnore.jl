@@ -136,6 +136,42 @@ function disagreements(repo::AbstractString; kwargs...)
 end
 
 """
+    walk_disagreements(repo) -> Vector{String}
+
+Compare the pruning walk's surviving set with git's, and describe each entry they
+differ on.
+
+The walk threads a rule stack down the tree while `isignored` walks the parents of
+one path, so they are different code reaching the same answer, and only one of the
+two is covered by [`disagreements`](@ref). A path survives the walk exactly when
+git reports neither it nor any parent as ignored, `.git` aside, which the walk
+drops at any depth whatever the rules say, including a nested repository's.
+"""
+function walk_disagreements(repo::AbstractString)
+    matcher = IgnoreMatcher(repo)
+    surviving = Set{String}()
+    walkfiltered(matcher, repo) do dir, dirs, files
+        prefix = relpath(dir, repo)
+        prefix = prefix == "." ? "" : replace(prefix, '\\' => '/')
+        for name in Iterators.flatten((dirs, files))
+            push!(surviving, isempty(prefix) ? name : "$(prefix)/$(name)")
+        end
+        return true
+    end
+    paths = tree_paths(repo)
+    theirs = ignored_paths(repo, first.(paths))
+    report = String[]
+    for (rel, is_dir) in paths
+        expected = !(rel in theirs) && !(".git" in split(rel, '/'))
+        expected == (rel in surviving) && continue
+        push!(report, string(rel, is_dir ? "/" : "",
+                             rel in surviving ? ": walked, git calls it ignored" :
+                                                ": pruned, git calls it visible"))
+    end
+    return report
+end
+
+"""
     sweep(patterns, build; into=".gitignore", alongside="") -> Vector{String}
 
 Run one fixture tree against many patterns, rewriting the ignore file named by

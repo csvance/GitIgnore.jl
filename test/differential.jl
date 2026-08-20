@@ -212,6 +212,7 @@ end
                 GitOracle.withrepo() do repo
                     build(repo)
                     @test GitOracle.disagreements(repo) == String[]
+                    @test GitOracle.walk_disagreements(repo) == String[]
                 end
             end
         end
