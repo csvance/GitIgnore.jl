@@ -10,8 +10,10 @@ subtrees pruned rather than filtered out afterwards.
 
 The verdicts are checked against the real `git` binary: the test suite compares
 this package with `git check-ignore` over generated trees and fails on any
-disagreement. `libgit2` is not used, because it disagrees with git in at least
-two ways this package gets right; the README has the detail.
+disagreement. That is the reason the package exists. Asking the binary per path
+costs a process spawn each time, and full parity with git could not be
+established through the `LibGit2` bundled in Julia, which answers two reproduced
+cases differently from git. The documentation has the detail.
 """
 module GitIgnore
 

@@ -3,6 +3,54 @@
 The package's one distinguishing claim is that its verdicts match git's. This
 page is what that claim rests on, and where it stops.
 
+## Why this exists
+
+Honouring `.gitignore` from Julia has two obvious routes. Neither one held up,
+which is what the rest of this page is about.
+
+### Asking the git binary is too expensive to do per path
+
+One `git check-ignore` process costs about 1.3 ms, and nearly all of that is
+process spawn rather than matching, so it does not improve with a warmer cache.
+On a 14,251 entry tree that is 18.6 s, where the pruning walk answers the same
+question in 1.4 ms.
+
+Batching helps and is still the wrong shape: one `check-ignore --stdin` process
+for every path costs 16 ms, but it cannot prune, so the caller has to enumerate
+the whole tree, including the build directory it was trying to avoid, before it
+can ask. The best subprocess design, one
+`git ls-files -o -i --exclude-standard --directory`, comes within 2x of the
+pruning walk on that tree and still needs a git binary, still needs a real
+repository, and still pays a whole-repository scan per query. The full table and
+its method are in [Benchmarks](benchmarks.md).
+
+The correctness argument matters more than the speed. `git check-ignore` outside a
+repository exits 128 with empty output, which reads exactly like "nothing here is
+ignored": a tool built on it fails by showing the caller everything, quietly.
+
+### Full parity with git could not be established through LibGit2
+
+Julia ships `LibGit2`, which exposes `git_ignore_path_is_ignored`. It is the
+obvious thing to reach for, and asked through a raw `ccall` on a fresh repository
+handle with no traversal, libgit2 1.9 answered differently from git 2.43 in two
+cases, so the difference is libgit2's behaviour rather than an artifact of how it
+was called. Both are named regression tests here.
+
+**A negation in a nested `.gitignore` did not override a shallower pattern.**
+With `*.tmp` at the root and `!important.tmp` in `pkg/.gitignore`, git does not
+ignore `pkg/important.tmp`. libgit2 ignored it.
+
+**A directory-only pattern matched a symlink to a directory.** With `link/` in
+`.gitignore`, where `link` is a symlink pointing at a directory, git does not
+ignore `link`, because a symlink is a file however it resolves. libgit2 ignored
+it.
+
+Two divergences found is not a survey, and how much further they go is not
+something we established. That is the difficulty rather than a footnote: both are
+the kind of divergence that hides a file the caller needed, silently, and a
+matcher whose verdicts cannot be checked against git is one you cannot trust to
+hide only what git hides. Checking them is what this package does instead.
+
 ## How it is checked
 
 `test/differential.jl` builds fixture trees in temporary repositories, asks this
@@ -41,39 +89,6 @@ julia --project=. bench/realworld.jl ~/src/one ~/src/two
 
 Over 24 checkouts on the author's machine, 371,576 paths, it found no
 disagreement.
-
-## Why not libgit2
-
-Julia ships `LibGit2`, which exposes `git_ignore_path_is_ignored`. It is the
-obvious thing to reach for, and it disagrees with git. Both of the following were
-reproduced against libgit2 1.9 with a raw `ccall` on a fresh repository handle
-and no traversal, so they are libgit2's behaviour rather than an artifact of how
-it was called, and both are named regression tests here.
-
-**A negation in a nested `.gitignore` does not override a shallower pattern.**
-With `*.tmp` at the root and `!important.tmp` in `pkg/.gitignore`, git 2.43 does
-not ignore `pkg/important.tmp`. libgit2 ignores it.
-
-**A `dir_only` pattern matches a symlink to a directory.** With `link/` in
-`.gitignore`, where `link` is a symlink pointing at a directory, git does not
-ignore `link`, because a symlink is a file however it resolves. libgit2 ignores
-it.
-
-Both are the kind of divergence that hides a file the caller needed, silently.
-
-## Why not shell out to git
-
-Because it does not scale, and because it fails quietly. On a 14,251 entry tree
-on local disk, one `git check-ignore` process per path costs 18.6 s against
-4.6 ms for the same queries in process, and the pruning walk answers the same
-question in 1.4 ms. Batching every path through one `check-ignore --stdin`
-process is affordable but cannot prune, so it pays for the whole tree whatever
-the caller wanted. The full table and its method are in
-[Benchmarks](benchmarks.md).
-
-The correctness argument matters more than the speed: `git check-ignore` needs a
-git binary and a real repository, and outside one it exits 128 with empty output,
-which reads exactly like "nothing here is ignored".
 
 ## What is deliberately not supported
 

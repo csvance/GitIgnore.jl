@@ -14,10 +14,18 @@ This package is that behaviour on its own: compile the ignore rules under a
 directory, ask whether a path is excluded, and walk a tree with the ignored
 subtrees pruned rather than filtered out afterwards.
 
-Its one distinguishing claim is fidelity. The verdicts are not read off the
-`gitignore(5)` manual page; they are compared against the real `git` binary by a
-differential test suite that walks generated fixture trees and fails on any
-disagreement.
+## Why this exists
+
+Asking the `git` binary is too expensive to do per path: one `git check-ignore`
+process costs about 1.3 ms, nearly all of it process spawn, so a 14,251 entry
+tree costs 18.6 s where the pruning walk answers in 1.4 ms. Full parity with git
+could not be established through the `LibGit2` bundled in Julia either, which
+answered two reproduced cases differently from git 2.43. So the rules are
+re-implemented here with no dependencies, and every verdict is checked against
+the real binary by a differential test suite. The documentation has the numbers,
+the two cases, and what is deliberately not supported.
+
+## Usage
 
 ```julia
 using GitIgnore

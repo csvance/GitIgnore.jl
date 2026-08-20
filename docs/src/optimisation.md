@@ -7,15 +7,20 @@ most of this document is recorded rejections.
 Evidence rules: a claim of a performance win needs a measurement on a tree built
 on local disk, since `~/Git` is NFS mounted and timings there are an order of
 magnitude slower and dominated by the filesystem. Anything unmeasured is labelled
-speculation and is not acted on. A review pass by a separate agent produced the
-measurements below on two trees: an 11,506 entry tree with 1,416 directories and
-32 ignore files at four depths, and the 14,251 entry tree `bench/benchmark.jl`
-builds. Both were re-measured here before anything was applied.
+speculation and is not acted on.
+
+Two passes are recorded. The first was a timing review, on an 11,506 entry tree
+with 1,416 directories and 32 ignore files at four depths and on the 14,251 entry
+tree `bench/benchmark.jl` builds, and every measurement in it was reproduced here
+before anything was applied. The second was an allocation pass with
+`BenchmarkTools` and `Profile.Allocs` at `sample_rate = 1`, which attributes every
+allocation to the line that made it, over a 12,048 entry tree; there the numbers
+that matter are allocation counts, and wall-clock time did not move.
 
 Every applied change was checked the same way: the differential suite green
-(220 tests at the time, 224 now, including 34 comparisons against git 2.43), and
-`bench/realworld.jl` over 24 real checkouts, 371,576 paths, with no disagreement
-in either the per-path verdict or the pruning walk.
+(245 tests, including 34 comparisons against git 2.43), and `bench/realworld.jl`
+over 24 real checkouts, 371,668 paths, with no disagreement in either the
+per-path verdict or the pruning walk.
 
 ## Applied
 
@@ -130,8 +135,9 @@ entry at a time, since both listing functions return something with a length.
 what makes the first item safe, because a variable that is sometimes a `String`
 and sometimes a view costs an allocation at every use of it.
 
-### Tried, measured, reverted
+## Tried, measured, reverted
 
+Applied, measured and undone, which is neither of the two sections around it.
 Recorded because the measurement is the only reason to prefer the code that is
 there, and because three of the four were the same Julia mistake.
 
