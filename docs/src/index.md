@@ -38,8 +38,8 @@ features:
     title: Pruning walk
     details: An ignored directory is never descended into, which is git's own semantics and makes honouring .gitignore six times faster than a walk that ignores it.
   - icon: 🛡️
-    title: Untrusted input
-    details: A .gitignore is whatever the repository you are standing in happens to contain. A line git treats as inert matches nothing here either, and one unusable line costs that line rather than the whole walk.
+    title: Malformed patterns
+    details: A pattern git treats as inert matches nothing here too. A broken line does not affect the other lines in the file, and a directory that cannot be read does not stop the walk.
 ---
 ```
 
