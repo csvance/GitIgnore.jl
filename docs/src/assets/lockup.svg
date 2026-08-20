@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 64" width="300" height="64" fill="none">
+  <g stroke-width="3.2" stroke-linecap="round">
+    <path d="M18 12 V48" stroke="#9558B2"></path>
+    <path d="M18 20 H38" stroke="#389826"></path>
+    <path d="M18 34 H38" stroke="#389826"></path>
+    <path d="M18 48 H38" stroke="#CB3C33" stroke-dasharray="4 6"></path>
+    <circle cx="18" cy="12" r="4" fill="#9558B2"></circle>
+    <circle cx="42" cy="20" r="4" fill="#389826"></circle>
+    <circle cx="42" cy="34" r="4" fill="#389826"></circle>
+    <circle cx="42" cy="48" r="4" stroke="#CB3C33" stroke-width="2.8"></circle>
+  </g>
+  <text x="62" y="41" font-family="JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, monospace" font-size="27" font-weight="700" letter-spacing="-0.5" fill="#1B1F24">GitIgnore<tspan fill="#9558B2">.jl</tspan></text>
+</svg>

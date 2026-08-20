@@ -21,21 +21,21 @@ features:
   - icon: 🔍
     title: Checked against git
     details: The test suite asks this package and git check-ignore about every path in generated fixture trees and fails on any disagreement, per path and through the walk.
-  - icon: ✂️
-    title: Pruning walk
-    details: An ignored directory is never descended into, which is git's own semantics and makes honouring .gitignore six times faster than a walk that ignores it.
+  - icon: ⚡
+    title: Not a subprocess
+    details: One git process per path costs 18.6 s on a 14,251 entry tree, almost all of it process spawn, where this answers in 1.4 ms.
   - icon: 🪶
     title: Zero dependencies
     details: The standard library and nothing else, so it costs a registered package nothing to depend on.
   - icon: 🧭
     title: Nested rules
     details: Every .gitignore and .git/info/exclude below the root governs its own subtree, so a matcher rooted at a home directory still honours each repository in it.
-  - icon: 🚫
-    title: Not libgit2
-    details: Full parity with git could not be established through the LibGit2 bundled in Julia, which answers two reproduced cases differently. Both are named regression tests here.
-  - icon: ⚡
-    title: Not a subprocess
-    details: One git process per path costs 18.6 s on a 14,251 entry tree, where the pruning walk answers in 1.4 ms.
+  - icon: ✂️
+    title: Pruning walk
+    details: An ignored directory is never descended into, which is git's own semantics and makes honouring .gitignore six times faster than a walk that ignores it.
+  - icon: 🛡️
+    title: Untrusted input
+    details: A .gitignore is whatever the repository you are standing in happens to contain. A line git treats as inert matches nothing here either, and one unusable line costs that line rather than the whole walk.
 ---
 ```
 
