@@ -185,12 +185,13 @@ end
         symlink(joinpath(dir, "sub"), joinpath(dir, "link"))
         symlink(joinpath(dir, "absent"), joinpath(dir, "broken"))
 
-        fast = GitIgnore.dir_entries(dir, true)
         slow = GitIgnore.dir_entries(dir, false)
-        @test fast == slow
+        # Asking for the fast path is only legal where Base still has it, which
+        # is the whole reason the slow one is kept.
+        GitIgnore.HAS_READDIRX && @test GitIgnore.dir_entries(dir, true) == slow
         # A symlink is a file whatever it points at, or fails to point at.
-        @test ("link", false) in fast
-        @test ("broken", false) in fast
-        @test ("sub", true) in fast
+        @test ("link", false) in slow
+        @test ("broken", false) in slow
+        @test ("sub", true) in slow
     end
 end
