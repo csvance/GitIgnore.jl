@@ -168,7 +168,7 @@ function inherited_stack(matcher::IgnoreMatcher, segments::Vector{String})
     isempty(segments) && return stack
     append!(stack, dir_rules(matcher, ""))
     prefix = ""
-    for index in 1:(length(segments) - 1)
+    for index in firstindex(segments):(lastindex(segments) - 1)
         prefix = isempty(prefix) ? segments[index] : "$(prefix)/$(segments[index])"
         append!(stack, dir_rules(matcher, prefix))
     end
@@ -212,7 +212,7 @@ function isignored(matcher::IgnoreMatcher, path::AbstractString, is_dir::Bool)
     isempty(segments) && return false
     stack = copy(dir_rules(matcher, ""))
     rel = ""
-    for index in 1:(length(segments) - 1)
+    for index in firstindex(segments):(lastindex(segments) - 1)
         rel = isempty(rel) ? segments[index] : "$(rel)/$(segments[index])"
         path_ignored(stack, rel, segments[index], true) && return true
         append!(stack, dir_rules(matcher, rel))

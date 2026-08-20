@@ -194,12 +194,14 @@ mutable struct Lcg
     state::UInt64
 end
 
+# Returns 0 through `limit - 1`, so a caller indexing a collection adds it to
+# `firstindex` rather than assuming the collection starts at 1.
 function draw!(rng::Lcg, limit::Integer)
     rng.state = 6364136223846793005 * rng.state + 1442695040888963407
-    return Int(rng.state >> 33) % limit + 1
+    return Int(rng.state >> 33) % limit
 end
 
-pick(rng::Lcg, choices) = choices[draw!(rng, length(choices))]
+pick(rng::Lcg, choices) = choices[firstindex(choices) + draw!(rng, length(choices))]
 
 const ATOMS = [
     "a", "b", "ab", "c.txt", "sub", "deep", "*", "**", "?", "*.txt",
@@ -213,7 +215,7 @@ function generated_patterns(count::Integer; seed::UInt64 = 0x5eed_1917_2b0f_c001
     rng = Lcg(seed)
     patterns = String[]
     while length(patterns) < count
-        segments = [pick(rng, ATOMS) for _ in 1:draw!(rng, 3)]
+        segments = [pick(rng, ATOMS) for _ in 1:(draw!(rng, 3) + 1)]
         pattern = pick(rng, PREFIXES) * join(segments, "/") * pick(rng, SUFFIXES)
         pattern in ("!", "/", "!/", "") || push!(patterns, pattern)
     end

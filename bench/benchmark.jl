@@ -131,7 +131,7 @@ function main()
             run(pipeline(cmd; stdout = devnull, stderr = devnull))
         end
 
-        sampled = FULL ? paths : paths[1:min(SAMPLE, length(paths))]
+        sampled = FULL ? paths : first(paths, SAMPLE)
         per_path = @elapsed for path in sampled
             cmd = ignorestatus(
                 setenv(
