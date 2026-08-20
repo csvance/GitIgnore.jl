@@ -23,7 +23,7 @@ could not be established through the `LibGit2` bundled in Julia either, which
 answered two reproduced cases differently from git 2.43. So the rules are
 re-implemented here with no dependencies, and every verdict is checked against
 the real binary by a differential test suite. The documentation has the numbers,
-the two cases, and what is deliberately not supported.
+the two cases, and the limits of the guarantee.
 
 ## Usage
 
