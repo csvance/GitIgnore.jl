@@ -1,3 +1,12 @@
+# Test CI on the supported Julia versions: 1.11 is the floor from the
+# Project.toml compat, 1.12 is the current release, and nightly is allowed to
+# fail. The differential suite compares this package with whatever `git` the
+# runner provides, so which git that is belongs in the log: a run on a machine
+# without git skips that suite and proves nothing about fidelity.
+#
+# A `changes` job computes whether anything the tests depend on changed; the test
+# job runs only when it has, so README-only or docs-only edits don't burn runner
+# time. A skipped test job counts as success for required-check gating.
 name: CI
 
 on:
@@ -8,30 +17,54 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# actions: write is needed because julia-actions/cache prunes its own old
+# caches.
+permissions:
+  contents: read
+  actions: write
+
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read   # dorny/paths-filter reads changed files from the PR
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: filter
+        with:
+          # The package's code, its tests, and the workflow itself. bench/ is
+          # not covered by the suite, and docs/ has its own workflow.
+          filters: |
+            code:
+              - 'src/**'
+              - 'test/**'
+              - 'Project.toml'
+              - '.github/workflows/CI.yml'
+
   test:
-    name: Julia ${{ matrix.version }} on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    name: Julia ${{ matrix.version }}
+    runs-on: ubuntu-latest
     continue-on-error: ${{ matrix.version == 'nightly' }}
     strategy:
       fail-fast: false
       matrix:
         version: ['1.11', '1.12', 'nightly']
-        os: [ubuntu-latest]
-        arch: [x64]
     steps:
-      - uses: actions/checkout@v4
-      - uses: julia-actions/setup-julia@v2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: julia-actions/setup-julia@fa02766e078afaaf09b14210362cee14137e6a32 # v3.0.2
         with:
           version: ${{ matrix.version }}
-          arch: ${{ matrix.arch }}
-      - uses: julia-actions/cache@v2
-      # The differential suite compares this package with whatever git the
-      # runner provides, so which git that is belongs in the log.
+      - uses: julia-actions/cache@a45e8fa8be21c18a06b7177052533149e61e9b38 # v3.1.0
       - name: Report the differential suite's oracle
         run: git --version
-      - uses: julia-actions/julia-buildpkg@v1
-      - uses: julia-actions/julia-runtest@v1
+      - name: Run tests
+        run: julia --project=. -e 'using Pkg; Pkg.test()'
