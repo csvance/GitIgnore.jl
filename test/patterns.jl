@@ -203,6 +203,30 @@ end
     @test !isignored(crlf, "keep.log", false)
 end
 
+@testset "git matches bytes, not characters" begin
+    # git's wildmatch consumes one byte per `?` and per bracket expression, so a
+    # multi-byte character takes as many of them as it has bytes. Matching by
+    # codepoint instead looks right and is wrong: it said `caf?.txt` covered
+    # `café.txt`, where git does not, and that `caf??.txt` did not, where git
+    # does. Every case here was checked against git 2.43.
+    @test !isignored(inline("caf?.txt"), "café.txt", false)
+    @test isignored(inline("caf?.txt"), "cafx.txt", false)
+    @test isignored(inline("caf??.txt"), "café.txt", false)
+    @test !isignored(inline("?.txt"), "é.txt", false)
+    @test isignored(inline("?.txt"), "a.txt", false)
+
+    # A class is one byte too, so a negated class does not match a character made
+    # of two, and a class holding one matches either of its bytes and not the
+    # character.
+    @test !isignored(inline("[!x].txt"), "é.txt", false)
+    @test isignored(inline("[!x].txt"), "a.txt", false)
+    @test !isignored(inline("caf[é].txt"), "café.txt", false)
+
+    # A literal, on the other hand, is the same either way: the pattern's bytes
+    # are matched against the name's bytes.
+    @test isignored(inline("café.txt"), "café.txt", false)
+end
+
 @testset "non-ASCII ignore patterns" begin
     # A byte-stepped loop would throw StringIndexError on any of these.
     @test occursin(ignore_glob_to_regex("café*", false), "café-notes")

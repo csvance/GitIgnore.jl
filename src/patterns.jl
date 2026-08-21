@@ -258,7 +258,11 @@ function ignore_glob_to_regex(pattern::AbstractString, anchored::Bool)
     end
     print(out, "\$")
     return try
-        Regex(String(take!(out)))
+        # The `a` flag is what makes this match bytes rather than codepoints, and
+        # git's wildmatch matches bytes: `?` and a bracket expression each consume
+        # one, so `caf?.txt` does not match `café.txt` while `caf??.txt` does. It
+        # also makes the POSIX classes ASCII, which is what git's ctype calls do.
+        Regex(String(take!(out)), "a")
     catch
         # An invalid range such as `[c-a]` is a PCRE compilation error, which git
         # leaves inert rather than fatal.

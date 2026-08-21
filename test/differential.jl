@@ -129,10 +129,16 @@ const FIXTURES = Pair{String, Function}[
     end,
     "non-ASCII names and patterns" => function (dir)
         mkpath(joinpath(dir, "日本"))
-        write(joinpath(dir, ".gitignore"), "café*\n日本/*.md\nünïcode?.txt\n")
+        # `?` and a bracket expression each match one byte in git, so the
+        # ones here land on a two byte character on purpose.
+        write(
+            joinpath(dir, ".gitignore"),
+            "café*\n日本/*.md\nünïcode?.txt\ncaf?.txt\nsp??e.txt\n[!x].md\nq[é].txt\n"
+        )
         for path in (
                 "café-notes", "cafe-notes", "日本/notes.md", "日本/notes.jl",
-                "ünïcodeX.txt", "ünïcode.txt",
+                "ünïcodeX.txt", "ünïcode.txt", "café.txt", "cafx.txt",
+                "spée.txt", "spxye.txt", "é.md", "a.md", "qé.txt",
             )
             write(joinpath(dir, split(path, '/')...), "x")
         end
@@ -183,7 +189,8 @@ const TABLE_PATTERNS = [
     "dir/sub", "dir/sub/", "**/sub/", "*/sub", "*/*/a.txt", "**/*.txt",
     "?.txt", "??.txt", "[ab]", "[!ab]", "[a-c].txt", "[]a].txt", "[[:digit:]].txt",
     "[b-a].txt", "a[b.txt", "a\\", "\\a", "sp ace.txt", "sp?ce.txt", "sp*.txt",
-    "café.txt", "caf*", "logs/**/*.log", "logs/**", "**/deep/", "node_modules/",
+    "café.txt", "caf*", "caf?.txt", "caf??.txt", "?.txt", "[!x].txt", "caf[é].txt",
+    "logs/**/*.log", "logs/**", "**/deep/", "node_modules/",
     "!node_modules/", "ab", "ab/", "x.tmp", "*.tmp", "-.txt", "].txt", "[.txt",
     "a.txt   ", "a.txt\\ ", "#a.txt", "\\#a.txt", "!", "/", "a//b", "a/./b",
 ]
@@ -230,7 +237,7 @@ function sweep_tree(dir::AbstractString)
     end
     for path in (
             "a", "b", "a.txt", "b.txt", "1.txt", "x.tmp", "-.txt", "].txt",
-            "[.txt", "sp ace.txt", "café.txt", "dir/a.txt", "dir/a",
+            "[.txt", "sp ace.txt", "café.txt", "é.txt", "dir/a.txt", "dir/a",
             "dir/sub/a.txt", "dir/sub/b", "other/a.txt", "ab/c.txt",
             "node_modules/pkg/index.js", "logs/a.log", "logs/deep/b.log",
             "deep/dir/a.txt", "deep/dir/x.tmp",

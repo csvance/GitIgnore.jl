@@ -102,6 +102,12 @@ disagreement.
   `git check-ignore`, not `git status`. A tracked file whose name matches a
   pattern is reported as ignored, and `.git` is reported as ignored when a
   pattern actually matches it, which is what `check-ignore` does too.
+- **Matching is by byte, not by character**, which is git's own behaviour rather
+  than a limitation: `wildmatch` consumes one byte per `?` and per bracket
+  expression, so `caf?.txt` does not match `café.txt` while `caf??.txt` does, and
+  a negated class does not match a character built from two bytes. The POSIX
+  classes are ASCII for the same reason. This is reproduced deliberately and is
+  swept against git.
 - **Case is significant.** `core.ignorecase`, which git sets on case-insensitive
   filesystems, is not modelled. On Linux this is git's own behaviour; on macOS and
   Windows it is a real divergence.
@@ -125,6 +131,12 @@ exclusions above, and the case-sensitivity gap is the one that would bite a macO
 or Windows user first.
 
 Two translation limits are worth naming. `[=a=]` and `[.a.]` are inert, as above.
+Byte matching was a real divergence until it was found: the translation matched
+codepoints, which reads as the reasonable thing to do and is not what git does.
+The fixtures had non-ASCII names and non-ASCII patterns, but never a `?` or a
+bracket expression landing on a multi-byte character, so the suite passed for
+weeks while five such cases disagreed with git. That gap is closed and swept, and
+it is the best argument on this page for why the differential suite exists.
 And a bracket range a regex engine rejects outright is emulated rather than
 translated: git's `wildmatch` compares each member literally as it reads it and
 applies a range only when it reaches the `-`, so `[c-a]` matches `c` and nothing
