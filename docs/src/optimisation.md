@@ -270,12 +270,14 @@ discovered during the walk would invalidate it.
 **Measured, with a prototype.** A byte alphabet Thompson NFA, the four fixes it
 needed, a gitignore-body-to-automaton translator and a lazily determinised DFA
 were built and validated against the shipped matcher, then timed per match over
-200 subjects. Two shapes of ignore file: `plain`, a mix of literal names, `*.ext`
-suffixes and directory patterns, which is what real files mostly contain, and
-`globby`, all `*x*N.log`, which is the shape that forces the shipped matcher to
-run a regex per pattern.
+200 subjects. Two shapes of ignore file. **Plain** is a mix of literal
+names, `*.ext` suffixes and directory patterns, which is what real files mostly
+contain, and which the shipped matcher reduces to a string comparison: a name is
+`==` and a leading star is `endswith`. **Wildcard** is all `*x*N.log`, a star in
+the middle, which is the cheapest shape that cannot be reduced and so forces a
+regex per pattern.
 
-| patterns | plain: shipped | plain: DFA | globby: shipped | globby: DFA |
+| patterns | plain: shipped | plain: DFA | wildcard: shipped | wildcard: DFA |
 | --- | --- | --- | --- | --- |
 | 5 | 36 ns | 54 ns | 265 ns | 55 ns |
 | 20 | 100 ns | 55 ns | 1,166 ns | 56 ns |
@@ -286,10 +288,10 @@ run a regex per pattern.
 
 The DFA is flat, which is the entire point: a step is one table lookup per byte,
 so a match costs the length of the subject and nothing per pattern. It crosses
-over at about 10 plain patterns and is ahead at every size for glob-shaped ones,
-reaching 32x at 500 plain patterns and 885x at 500 glob-shaped ones. State counts
+over at about 10 plain patterns and is ahead at every size for wildcard ones,
+reaching 32x at 500 plain patterns and 885x at 500 wildcard ones. State counts
 stay small and do not explode: 22 to 132 DFA states across the plain sizes, and
-172 for every globby size from 100 up.
+172 for every wildcard size from 100 up.
 
 **The NFA simulation on its own is a dead end.** Stepping a state set per byte
 without determinising costs 791 ns at 5 plain patterns and 9,252 ns at 50, which
@@ -299,7 +301,7 @@ DFA. Determinisation is not an optimisation of this idea, it is the idea.
 **What it costs.** Cold, the automaton is roughly twice the parse: 1.7 ms against
 994 us at 200 plain patterns, counting construction plus the first pass that
 fills the transition tables. That is repaid after about 900 matches for plain
-patterns and about 250 for glob-shaped ones, which any walk of a real repository
+patterns and about 250 for wildcard ones, which any walk of a real repository
 clears easily. Memory is the real cost: a dense 256 entry table of `Int32` per
 state is 1 KiB, states materialise as subjects explore the automaton, and a run
 whose subjects mostly match reached 354 states and 354 KiB for one 200 line
@@ -343,7 +345,7 @@ That is how the basename reduction was accepted.
 
 **Verdict: real, and still not taken.** The measurement settles that the idea
 works and how much it is worth: flat matching cost, a crossover at about ten
-patterns, and orders of magnitude on glob-heavy files. What it does not settle is
+patterns, and orders of magnitude on wildcard-heavy files. What it does not settle is
 whether this package should carry it. The prototype is around 500 lines of
 automaton, translator and determiniser, all of which has to agree with git
 exactly, in a package whose one claim is that its verdicts do. The differential
