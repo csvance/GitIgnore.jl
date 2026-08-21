@@ -267,28 +267,50 @@ Compiling per ignore file rather than per rule stack also avoids the obvious
 objection to a whole-stack automaton, which is that a deeper `.gitignore`
 discovered during the walk would invalidate it.
 
-**The cost it removes is linear in the number of lines, and the applied basename
-change already took most of it.** Timing `isignored` over 2,000 three-segment
-paths against an ignore file of N non-matching patterns, per path, after the
-optimisations above:
+**Measured, with a prototype.** A byte alphabet Thompson NFA, the four fixes it
+needed, a gitignore-body-to-automaton translator and a lazily determinised DFA
+were built and validated against the shipped matcher, then timed per match over
+200 subjects. Two shapes of ignore file: `plain`, a mix of literal names, `*.ext`
+suffixes and directory patterns, which is what real files mostly contain, and
+`globby`, all `*x*N.log`, which is the shape that forces the shipped matcher to
+run a regex per pattern.
 
-| pattern shape | 6 | 50 | 200 | 500 |
+| patterns | plain: shipped | plain: DFA | globby: shipped | globby: DFA |
 | --- | --- | --- | --- | --- |
-| `*.extN`, a suffix test | 0.64 us | 1.31 us | 4.26 us | 9.90 us |
-| `fileN.txt`, a literal test | 0.43 us | 1.13 us | 3.27 us | 7.77 us |
-| `*x*N.log`, needs a regex | 1.33 us | 10.60 us | 42.92 us | 133.21 us |
-| `a/b/N.log`, anchored | 1.39 us | 10.11 us | 40.47 us | 123.02 us |
+| 5 | 36 ns | 54 ns | 265 ns | 55 ns |
+| 20 | 100 ns | 55 ns | 1,166 ns | 56 ns |
+| 50 | 240 ns | 57 ns | 3,228 ns | 57 ns |
+| 100 | 440 ns | 59 ns | 6,741 ns | 58 ns |
+| 200 | 833 ns | 57 ns | 13,818 ns | 58 ns |
+| 500 | 2,081 ns | 64 ns | 51,108 ns | 58 ns |
 
-Before the basename change every row looked like the third one: 200 patterns cost
-53 us per path whatever their shape. The linear factor is still there, but it now
-costs 20 ns per pattern for the shapes real ignore files are mostly made of and
-210 ns per pattern for the ones that need a regex. Across the 24 checkouts the
-real-world check runs over, the largest `.gitignore` is 51 lines, the median is
-under 20, and almost every line is a literal or a suffix, which puts a realistic
-repository at about 1.3 us per entry tested. An automaton would still remove the
-linear factor outright, and it would still be worth something on an ignore file of
-a few hundred regex-shaped patterns, but the absolute numbers it competes against
-are now an order of magnitude smaller than they were when this was first written.
+The DFA is flat, which is the entire point: a step is one table lookup per byte,
+so a match costs the length of the subject and nothing per pattern. It crosses
+over at about 10 plain patterns and is ahead at every size for glob-shaped ones,
+reaching 32x at 500 plain patterns and 885x at 500 glob-shaped ones. State counts
+stay small and do not explode: 22 to 132 DFA states across the plain sizes, and
+172 for every globby size from 100 up.
+
+**The NFA simulation on its own is a dead end.** Stepping a state set per byte
+without determinising costs 791 ns at 5 plain patterns and 9,252 ns at 50, which
+is worse than the shipped matcher everywhere and 20 to 100 times worse than the
+DFA. Determinisation is not an optimisation of this idea, it is the idea.
+
+**What it costs.** Cold, the automaton is roughly twice the parse: 1.7 ms against
+994 us at 200 plain patterns, counting construction plus the first pass that
+fills the transition tables. That is repaid after about 900 matches for plain
+patterns and about 250 for glob-shaped ones, which any walk of a real repository
+clears easily. Memory is the real cost: a dense 256 entry table of `Int32` per
+state is 1 KiB, states materialise as subjects explore the automaton, and a run
+whose subjects mostly match reached 354 states and 354 KiB for one 200 line
+ignore file. An interval-keyed transition table would cut that, at the price of a
+search per byte.
+
+**And it still would not move the walk much.** Matching is not what a walk
+spends its time on: `readdir` and `lstat` are, at roughly 1 us per entry against
+36 ns of matching for a five line ignore file. The prize here is for a caller
+making hundreds of thousands of `isignored` calls against a large ignore file,
+not for `walkfiltered`.
 
 **There is no off-the-shelf Julia package for it.** In the General registry,
 `Automa.jl` is the only serious automata compiler, and it is a regex-to-Julia
@@ -319,11 +341,14 @@ compared against both git and the naive per-pattern implementation over generate
 patterns, so a divergence shows up as a test failure rather than as a hidden file.
 That is how the basename reduction was accepted.
 
-**Verdict: deferred, and now further away than it was.** The shape buckets were
-applied and are the cheap two thirds of this idea: a literal is a `==` and a
-suffix is an `endswith`, and those two shapes cover most of what a real
-`.gitignore` contains. What an automaton would add on top is removing the linear
-factor for the regex-shaped remainder, and doing that means writing an
-interval-based engine by hand, for a package whose one selling point is verified
-fidelity. Revisit if a workload appears with hundreds of regex-shaped patterns in
-one ignore file; until then the measurement does not justify the surface.
+**Verdict: real, and still not taken.** The measurement settles that the idea
+works and how much it is worth: flat matching cost, a crossover at about ten
+patterns, and orders of magnitude on glob-heavy files. What it does not settle is
+whether this package should carry it. The prototype is around 500 lines of
+automaton, translator and determiniser, all of which has to agree with git
+exactly, in a package whose one claim is that its verdicts do. The differential
+suite makes that checkable rather than hopeful, and the prototype already passes
+it on the shapes benchmarked, so the door is open. It stays shut until a workload
+turns up whose profile is dominated by matching against a large ignore file,
+because for the walk the syscalls dominate and for a small ignore file the DFA is
+slower than what is there now.
