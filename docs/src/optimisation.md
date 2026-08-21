@@ -275,7 +275,9 @@ names, `*.ext` suffixes and directory patterns, which is what real files mostly
 contain, and which the shipped matcher reduces to a string comparison: a name is
 `==` and a leading star is `endswith`. **Wildcard** is all `*x*N.log`, a star in
 the middle, which is the cheapest shape that cannot be reduced and so forces a
-regex per pattern.
+regex per pattern. The gap between the two columns is not the cost of a wildcard:
+a star in the middle takes a regex from 44 ns to 52 ns, about 18%. It is the cost
+of calling a regex at all, 44 ns against 6.5 ns for a string comparison.
 
 | patterns | plain: shipped | plain: DFA | wildcard: shipped | wildcard: DFA |
 | --- | --- | --- | --- | --- |
