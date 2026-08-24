@@ -1,6 +1,6 @@
 name = "GitIgnore"
 uuid = "a0010394-fc0d-43eb-a3e0-33caa976912f"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Carroll Vance <cvance@medicalmetrics.com>"]
 
 [compat]
