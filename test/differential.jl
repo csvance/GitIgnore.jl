@@ -179,6 +179,13 @@ const FIXTURES = Pair{String, Function}[
         mkpath(joinpath(dir, "level", "build", "deep"))
         return write(joinpath(dir, "level", "build", "deep", "x.o"), "x")
     end,
+    "a backslash in a file name" => function (dir)
+        write(joinpath(dir, ".gitignore"), "b.txt\n")
+        write(joinpath(dir, "b.txt"), "x")
+        write(joinpath(dir, "keep"), "x")
+        write(joinpath(dir, "a\\b.txt"), "x")
+        return
+    end,
 ]
 
 # Patterns worth checking one at a time against the tree below. Anything whose
@@ -255,6 +262,11 @@ end
         @info "differential suite oracle: $(GitOracle.version())"
 
         for (name, build) in FIXTURES
+            if Sys.iswindows() && name == "a backslash in a file name"
+                @info "a backslash in a file name is skipped on Windows: " *
+                    "a backslash is a separator there, so this run proves nothing about that name"
+                continue
+            end
             @testset "$name" begin
                 GitOracle.withrepo() do repo
                     build(repo)

@@ -9,7 +9,8 @@ const IGNORE_FILE_NAME = ".gitignore"
 # need git configuration this package does not parse, so they are not read.
 const GIT_EXCLUDE_PATH = (".git", "info", "exclude")
 
-normalize_relpath(path::AbstractString) = replace(path, '\\' => '/')
+normalize_relpath(path::AbstractString) =
+    Sys.iswindows() ? replace(path, '\\' => '/') : path
 
 """
 What a compiled pattern is matched against.
