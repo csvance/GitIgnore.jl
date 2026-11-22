@@ -111,6 +111,9 @@ disagreement.
 - **Case is significant.** `core.ignorecase`, which git sets on case-insensitive
   filesystems, is not modelled. On Linux this is git's own behaviour; on macOS and
   Windows it is a real divergence.
+- **A backslash in a path is a separator only on Windows.** Elsewhere a
+  backslash in a query path or an explicit-rule prefix is a literal filename
+  character, as it is to git, so `a\b.txt` names one file and not `b.txt` in `a`.
 - **`[=a=]` and `[.a.]` are inert.** Equivalence classes and collating elements
   are git syntax that PCRE does not implement, so a pattern containing one matches
   nothing rather than being mistranslated into a pattern that hides the wrong
